@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 DB_PATH = os.path.join(os.getcwd(), "data", "market_data.db")
-CONFIG_PATH = os.path.join(os.getcwd(), "config", "nifty100_watchlist.json")
+CONFIG_PATH = os.path.join(os.getcwd(), "config", "watchlist.json")
 MODEL_DIR = os.path.join(os.getcwd(), "data", "models")
 BEST_MODEL_PATH = os.path.join(MODEL_DIR, "best_model.pkl")
 
@@ -30,30 +30,36 @@ class ModelComparator:
 
     def _load_watchlist(self) -> list:
         if not os.path.exists(CONFIG_PATH):
-            return ["RELIANCE", "TCS", "HDFCBANK", "INFY", "TATAMOTORS"]
+            logger.warning(f"Config file not found at {CONFIG_PATH}. Using fallback list.")
+            return ["RELIANCE", "TCS", "HDFCBANK", "INFY", "SBIN"]
         with open(CONFIG_PATH, "r") as f:
-            return json.load(f).get("watchlist", [])
+            data = json.load(f)
+            return data.get("watchlist", [])
 
     def load_and_engineer_features(self) -> pd.DataFrame:
-        """
-        Engineers technical features and strictly lags them by 1 trading day 
-        to eliminate look-ahead bias and data leakage.
-        """
+        """Loads data from SQLite, reports row counts, and engineers leakage-free features."""
         all_dfs = []
         
+        logger.info(f"Inspecting SQLite database for {len(self.watchlist)} watchlist tickers...")
+        
         for ticker in self.watchlist:
-            query = f"SELECT timestamp, open, high, low, close, volume FROM daily_ohlcv WHERE ticker = '{ticker}' ORDER BY timestamp ASC"
+            query = f"SELECT timestamp, open, high, low, close, adj_close, volume FROM daily_ohlcv WHERE ticker = '{ticker}' ORDER BY timestamp ASC"
             df = pd.read_sql(query, self.conn)
             
-            if df.empty or len(df) < 250:
+            if df.empty:
+                logger.warning(f"⚠️ No data found in DB for {ticker}.")
+                continue
+                
+            if len(df) < 100:
+                logger.warning(f"⚠️ Insufficient rows ({len(df)}) for {ticker}. Skipping...")
                 continue
                 
             df['timestamp'] = pd.to_datetime(df['timestamp'])
             
-            # --- 1. Raw Calculations (Before Shifting) ---
-            df['return_1d'] = df['close'].pct_change(1)
-            df['return_3d'] = df['close'].pct_change(3)
-            df['return_5d'] = df['close'].pct_change(5)
+            # --- Feature Engineering ---
+            df['return_1d'] = df['adj_close'].pct_change(1)
+            df['return_3d'] = df['adj_close'].pct_change(3)
+            df['return_5d'] = df['adj_close'].pct_change(5)
             
             df['volatility_14'] = df['return_1d'].rolling(window=14).std()
             df['intraday_spread'] = (df['high'] - df['low']) / df['close']
@@ -78,7 +84,7 @@ class ModelComparator:
             df['vol_ma_20'] = df['volume'].rolling(window=20).mean()
             df['vol_ratio'] = df['volume'] / (df['vol_ma_20'] + 1e-5)
 
-            # --- 2. CRITICAL: Lag all features and indicators by 1 trading day ---
+            # Lag features by 1 trading day to eliminate look-ahead bias
             feature_cols_raw = [
                 'close', 'return_1d', 'return_3d', 'return_5d',
                 'volatility_14', 'intraday_spread',
@@ -89,31 +95,26 @@ class ModelComparator:
             for col in feature_cols_raw:
                 df[f'{col}_lag1'] = df[col].shift(1)
             
-            df['dist_ema9_lag1'] = (df['close_lag1'] - df['ema_9_lag1']) / df['ema_9_lag1']
-            df['dist_sma50_lag1'] = (df['close_lag1'] - df['sma_50_lag1']) / df['sma_50_lag1']
-
-            # --- Target: 3-Day Forward Trend Direction ---
             df['target'] = (df['close'].shift(-3) > df['close']).astype(int)
             
             df.dropna(inplace=True)
             df['ticker'] = ticker
             all_dfs.append(df)
+            logger.info(f"Loaded {len(df)} valid training samples for {ticker}.")
             
         if not all_dfs:
-            raise ValueError("Insufficient data available in SQLite database.")
+            raise ValueError("No valid training samples could be constructed from SQLite database. Ensure database_manager has populated data.")
             
         combined_df = pd.concat(all_dfs, ignore_index=True)
-        logger.info(f"Engineered leakage-free lagged features. Total records: {len(combined_df)}")
+        logger.info(f"Total aggregated dataset size across all valid tickers: {len(combined_df)} records.")
         return combined_df
 
     def evaluate_models(self):
         df = self.load_and_engineer_features()
         
-        # Strictly use lagged feature vectors to prevent look-ahead bias
         feature_cols = [
             'close_lag1', 'return_1d_lag1', 'return_3d_lag1', 'return_5d_lag1',
             'volatility_14_lag1', 'intraday_spread_lag1',
-            'dist_ema9_lag1', 'dist_sma50_lag1',
             'rsi_14_lag1', 'macd_lag1', 'macd_signal_lag1', 'macd_hist_lag1', 'vol_ratio_lag1'
         ]
         

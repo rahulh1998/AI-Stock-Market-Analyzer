@@ -2,7 +2,6 @@ import sqlite3
 import pandas as pd
 import pandas_ta as ta
 import logging
-import requests
 import yfinance as yf
 import json
 import time
@@ -18,7 +17,7 @@ CONFIG_PATH = os.path.join(CONFIG_DIR, "watchlist.json")
 
 class DatabaseManager:
     def __init__(self):
-        """Initializes SQLite connection, tables, ensures config exists, and loads watchlist."""
+        """Initializes SQLite connection, ensures schema is up to date, and loads watchlist."""
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
         self.conn = sqlite3.connect(DB_PATH)
         self._create_tables()
@@ -29,13 +28,48 @@ class DatabaseManager:
             "TATAMOTORS": "TMPV"
         }
 
-        self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        })
+    def _create_tables(self):
+        """Creates tables and safely migrates legacy schemas if columns are missing."""
+        cursor = self.conn.cursor()
+        
+        # 1. OHLCV Table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS daily_ohlcv (
+                ticker TEXT,
+                timestamp DATE,
+                open REAL,
+                high REAL,
+                low REAL,
+                close REAL,
+                volume INTEGER,
+                PRIMARY KEY (ticker, timestamp)
+            )
+        """)
+        
+        # Safe migration: Add adj_close if it doesn't exist in legacy databases
+        try:
+            cursor.execute("ALTER TABLE daily_ohlcv ADD COLUMN adj_close REAL;")
+            self.conn.commit()
+            logger.info("Successfully migrated database schema: Added 'adj_close' column.")
+        except sqlite3.OperationalError:
+            # Column already exists, safe to ignore
+            pass
+
+        # 2. Sentiment Table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS stock_sentiment (
+                ticker TEXT,
+                timestamp DATE,
+                sentiment_score REAL,
+                sentiment_label TEXT,
+                summary TEXT,
+                PRIMARY KEY (ticker, timestamp)
+            )
+        """)
+        self.conn.commit()
 
     def _ensure_config_exists(self):
-        """Automatically creates the config directory and watchlist.json file if missing."""
+        """Automatically creates config directory and watchlist.json if missing."""
         if not os.path.exists(CONFIG_PATH):
             os.makedirs(CONFIG_DIR, exist_ok=True)
             default_watchlist = {
@@ -70,24 +104,8 @@ class DatabaseManager:
             logger.info(f"Loaded {len(watchlist)} tickers from {CONFIG_PATH}")
             return watchlist
 
-    def _create_tables(self):
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS daily_ohlcv (
-                ticker TEXT,
-                timestamp DATE,
-                open REAL,
-                high REAL,
-                low REAL,
-                close REAL,
-                adj_close REAL,
-                volume INTEGER,
-                PRIMARY KEY (ticker, timestamp)
-            )
-        """)
-        self.conn.commit()
-
     def seed_watchlist(self, days_back: int = 1825):
+        """Fetches 5 years of historical data and stores it in SQLite."""
         to_date = date.today()
         from_date = to_date - timedelta(days=days_back)
         
@@ -96,19 +114,21 @@ class DatabaseManager:
 
         logger.info(f"Starting 5-year ingestion for {len(self.watchlist)} stocks...")
 
-        for ticker in self.watchlist:
+        for idx, ticker in enumerate(self.watchlist):
             query_ticker = self.ticker_aliases.get(ticker, ticker)
             yf_ticker = f"{query_ticker}.NS"
             
-            time.sleep(1.0)
+            time.sleep(1.5)
             
             try:
-                ticker_obj = yf.Ticker(yf_ticker, session=self.session)
-                df = ticker_obj.history(start=start_str, end=end_str, auto_adjust=False)
+                df = yf.download(yf_ticker, start=start_str, end=end_str, progress=False, auto_adjust=False)
                 
                 if df.empty:
                     logger.warning(f"No data returned for {yf_ticker}. Skipping...")
                     continue
+                    
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = df.columns.get_level_values(0)
                     
                 df = df.reset_index()
                 df.columns = [str(c).lower() for c in df.columns]
@@ -150,7 +170,7 @@ class DatabaseManager:
                 self.conn.commit()
 
                 df.to_sql("daily_ohlcv", self.conn, if_exists="append", index=False)
-                logger.info(f"Successfully stored {len(df)} records for {ticker}.")
+                logger.info(f"[{idx+1}/{len(self.watchlist)}] Successfully stored {len(df)} records for {ticker}.")
                 
             except Exception as e:
                 logger.error(f"Error processing {ticker}: {e}. Skipping...")
@@ -176,6 +196,21 @@ class DatabaseManager:
         df.dropna(inplace=True)
         df.reset_index(drop=True, inplace=True)
         return df
+
+    def save_sentiment(self, ticker: str, timestamp: str, score: float, label: str, summary: str):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO stock_sentiment (ticker, timestamp, sentiment_score, sentiment_label, summary)
+            VALUES (?, ?, ?, ?, ?)
+        """, (ticker, timestamp, score, label, summary))
+        self.conn.commit()
+
+    def get_latest_sentiment(self, ticker: str) -> dict:
+        query = f"SELECT timestamp, sentiment_score, sentiment_label, summary FROM stock_sentiment WHERE ticker = '{ticker}' ORDER BY timestamp DESC LIMIT 1"
+        df = pd.read_sql(query, self.conn)
+        if df.empty:
+            return {"sentiment_score": 0.0, "sentiment_label": "NEUTRAL", "summary": "No recent sentiment data."}
+        return df.iloc[0].to_dict()
 
 if __name__ == "__main__":
     db = DatabaseManager()
