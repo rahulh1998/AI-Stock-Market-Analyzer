@@ -1,0 +1,15 @@
+# Virtual Environment
+.venv/
+env/
+
+# Security (API Keys)
+.env
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Databases and Local Data
+*.db
+*.sqlite3
+data/chromadb/
