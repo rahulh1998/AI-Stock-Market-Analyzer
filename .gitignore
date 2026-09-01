@@ -13,3 +13,6 @@ __pycache__/
 *.db
 *.sqlite3
 data/chromadb/
+
+# Trading Books & PDFs
+data/books/*.pdf
