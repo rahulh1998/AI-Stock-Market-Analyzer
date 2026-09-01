@@ -212,6 +212,135 @@ class DatabaseManager:
             return {"sentiment_score": 0.0, "sentiment_label": "NEUTRAL", "summary": "No recent sentiment data."}
         return df.iloc[0].to_dict()
 
+
+    def update_today_live_data(self, ticker: str):
+        """Fetches today's live candle or latest price and updates SQLite."""
+        query_ticker = self.ticker_aliases.get(ticker, ticker)
+        yf_ticker = f"{query_ticker}.NS"
+        
+        try:
+            ticker_obj = yf.Ticker(yf_ticker)
+            # Fetch the last 2 days with 1-day or 1-minute intervals to capture today's live state
+            df = ticker_obj.history(period="2d", interval="1d", auto_adjust=False)
+            
+            if df.empty:
+                return
+                
+            df = df.reset_index()
+            df.columns = [str(c).lower() for c in df.columns]
+            
+            # Map columns
+            rename_map = {}
+            for col in df.columns:
+                if 'date' in col or 'timestamp' in col:
+                    rename_map[col] = 'timestamp'
+                elif 'open' in col:
+                    rename_map[col] = 'open'
+                elif 'high' in col:
+                    rename_map[col] = 'high'
+                elif 'low' in col:
+                    rename_map[col] = 'low'
+                elif 'close' in col and 'adj' not in col:
+                    rename_map[col] = 'close'
+                elif 'adj close' in col or 'adj_close' in col:
+                    rename_map[col] = 'adj_close'
+                elif 'volume' in col:
+                    rename_map[col] = 'volume'
+                    
+            df.rename(columns=rename_map, inplace=True)
+            if 'adj_close' not in df.columns and 'close' in df.columns:
+                df['adj_close'] = df['close']
+
+            df['ticker'] = ticker
+            df['timestamp'] = pd.to_datetime(df['timestamp']).dt.strftime('%Y-%m-%d')
+            
+            # Take the absolute latest row (today's live bar)
+            latest_row = df.iloc[[-1]].copy()
+            required_cols = ['ticker', 'timestamp', 'open', 'high', 'low', 'close', 'adj_close', 'volume']
+            latest_row = latest_row[required_cols]
+            
+            cursor = self.conn.cursor()
+            # Upsert today's candle so it stays up-to-date live
+            cursor.execute("""
+                INSERT OR REPLACE INTO daily_ohlcv (ticker, timestamp, open, high, low, close, adj_close, volume)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, tuple(latest_row.iloc[0]))
+            self.conn.commit()
+            
+        except Exception as e:
+            logger.error(f"Could not fetch live data for {ticker}: {e}")
+    
+    def update_latest_data(self):
+        """Pings yfinance for the last 5 days of data and upserts new candles into SQLite."""
+        logger.info(f"Starting incremental daily update for {len(self.watchlist)} stocks...")
+
+        for idx, ticker in enumerate(self.watchlist):
+            query_ticker = self.ticker_aliases.get(ticker, ticker)
+            yf_ticker = f"{query_ticker}.NS"
+            
+            time.sleep(1.0) # Rate-limiting pause
+            
+            try:
+                # Fetch recent window (last 5 days) to ensure today's candle is captured
+                df = yf.download(yf_ticker, period="5d", progress=False, auto_adjust=False)
+                
+                if df.empty:
+                    continue
+                    
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = df.columns.get_level_values(0)
+                    
+                df = df.reset_index()
+                df.columns = [str(c).lower() for c in df.columns]
+                
+                rename_map = {}
+                for col in df.columns:
+                    if 'date' in col or 'timestamp' in col:
+                        rename_map[col] = 'timestamp'
+                    elif 'open' in col:
+                        rename_map[col] = 'open'
+                    elif 'high' in col:
+                        rename_map[col] = 'high'
+                    elif 'low' in col:
+                        rename_map[col] = 'low'
+                    elif 'close' in col and 'adj' not in col:
+                        rename_map[col] = 'close'
+                    elif 'adj close' in col or 'adj_close' in col:
+                        rename_map[col] = 'adj_close'
+                    elif 'volume' in col:
+                        rename_map[col] = 'volume'
+                        
+                df.rename(columns=rename_map, inplace=True)
+                
+                if 'adj_close' not in df.columns and 'close' in df.columns:
+                    df['adj_close'] = df['close']
+
+                required_cols = ['timestamp', 'open', 'high', 'low', 'close', 'adj_close', 'volume']
+                if not all(col in df.columns for col in required_cols):
+                    continue
+
+                df = df[required_cols].copy()
+                df['ticker'] = ticker
+                df['timestamp'] = pd.to_datetime(df['timestamp']).dt.strftime('%Y-%m-%d')
+                df.dropna(inplace=True)
+                
+                cursor = self.conn.cursor()
+                # Upsert records to prevent duplicates and append latest sessions
+                for _, row in df.iterrows():
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO daily_ohlcv (ticker, timestamp, open, high, low, close, adj_close, volume)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (row['ticker'], row['timestamp'], row['open'], row['high'], row['low'], row['close'], row['adj_close'], row['volume']))
+                self.conn.commit()
+                
+                logger.info(f"[{idx+1}/{len(self.watchlist)}] Successfully updated latest records for {ticker}.")
+                
+            except Exception as e:
+                logger.error(f"Error updating {ticker}: {e}")
+                continue
+
 if __name__ == "__main__":
     db = DatabaseManager()
     db.seed_watchlist(days_back=1825)
+
+

@@ -1,10 +1,14 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import streamlit as st
 import pandas as pd
 import sqlite3
-import os
 import joblib
 import json
 import plotly.graph_objects as go
+from src.ml_engine.candle_patterns import detect_candlestick_patterns
 
 st.set_page_config(page_title="AI Stock Market Analyzer - NSE", layout="wide")
 
@@ -39,7 +43,7 @@ def get_sentiment(ticker: str) -> dict:
 
 # --- UI Layout ---
 st.title("📈 AI-Powered NSE Stock Market Analyzer")
-st.markdown("Institutional Quant Framework with Dynamic Price Targets, ML Probabilities, & Sentiment.")
+st.markdown("Institutional Quant Framework with ML Probabilities, Sentiment, Price Targets, & Candlestick Pattern Rules.")
 
 watchlist = load_watchlist()
 selected_ticker = st.sidebar.selectbox("Select Nifty Ticker", watchlist)
@@ -68,7 +72,6 @@ if selected_ticker:
     with col3:
         st.subheader("🤖 AI Execution & Price Targets")
         
-        # ML Model Inference
         ml_prob = 50.0
         if os.path.exists(MODEL_PATH) and not df.empty and len(df) > 50:
             try:
@@ -111,7 +114,6 @@ if selected_ticker:
             except Exception as e:
                 pass
 
-        # Calculate ATR for dynamic price targets
         if not df.empty and len(df) > 15:
             high_low = df['high'] - df['low']
             high_close = (df['high'] - df['close'].shift()).abs()
@@ -119,11 +121,10 @@ if selected_ticker:
             true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
             atr_14 = true_range.rolling(14).mean().iloc[-1]
         else:
-            atr_14 = latest_close * 0.015 # Fallback 1.5% estimate
+            atr_14 = latest_close * 0.015
 
         sent_score = sentiment['sentiment_score']
         
-        # Signal & Price Level Calculation
         if ml_prob > 55.0 and sent_score >= 0.0:
             signal = "🟢 STRONG BUY"
             entry_price = latest_close
@@ -142,15 +143,14 @@ if selected_ticker:
 
         st.markdown(f"### Signal: **{signal}**")
         st.write(f"**ML Upward Prob:** {ml_prob:.1f}%")
-        
         st.markdown("---")
         st.markdown(f"* **Recommended Entry:** ₹{entry_price:.2f}")
         st.markdown(f"* **Target Price (Take Profit):** ₹{target_price:.2f}")
         st.markdown(f"* **Stop-Loss Level:** ₹{stop_loss:.2f}")
 
-    # --- Candlestick Chart ---
+    # --- Candlestick Chart & Pattern Rules Expander ---
     if not df.empty:
-        st.subheader("Price Chart & Technical Trend")
+        st.subheader("Price Chart & Technical Trends")
         fig = go.Figure(data=[go.Candlestick(
             x=df['timestamp'],
             open=df['open'],
@@ -161,3 +161,26 @@ if selected_ticker:
         )])
         fig.update_layout(xaxis_rangeslider_visible=False, height=450, margin=dict(l=10, r=10, t=10, b=10))
         st.plotly_chart(fig, use_container_width=True)
+
+        # Run Candlestick Rule Scanner
+        pattern_df = detect_candlestick_patterns(df.copy())
+        
+        with st.expander("🕯️ View 15 Candlestick Pattern Rules (Latest Session Status)", expanded=True):
+            pattern_columns = [
+                'Doji', 'Bullish Marubozu', 'Bearish Marubozu', 'Hammer', 'Shooting Star',
+                'Bullish Engulfing', 'Bearish Engulfing', 'Piercing Line', 'Dark Cloud Cover',
+                'Morning Star', 'Evening Star', 'Three White Soldiers', 'Three Black Crows',
+                'Spinning Top', 'Hanging Man'
+            ]
+            
+            latest_patterns = pattern_df.iloc[-1]
+            
+            cols = st.columns(3)
+            for idx, pat in enumerate(pattern_columns):
+                is_detected = bool(latest_patterns.get(pat, False))
+                col_idx = idx % 3
+                with cols[col_idx]:
+                    if is_detected:
+                        st.success(f"✅ **{pat}**: DETECTED")
+                    else:
+                        st.text(f"⚪ {pat}: Inactive")
