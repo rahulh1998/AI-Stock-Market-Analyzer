@@ -12,9 +12,11 @@ class RiskEngine:
         self.default_capital = default_capital
         self.max_risk_per_trade_pct = max_risk_per_trade_pct
 
-    def calculate_levels(self, current_price: float, atr_14: float, action: str) -> Dict[str, float]:
+    def calculate_levels(self, current_price: float, atr_14: float, action: str, 
+                         dl_bounds: Optional[Dict[str, float]] = None) -> Dict[str, float]:
         """
-        Calculates ATR-based volatility Stop-Loss and Target levels.
+        Calculates ATR-based volatility Stop-Loss and Target levels,
+        harmonized with deep learning sequential trajectory bounds.
         """
         action = action.upper()
         if action not in ["BUY", "SELL"]:
@@ -28,17 +30,34 @@ class RiskEngine:
             }
 
         # 1.5x ATR buffer accommodates standard volatility swings
-        sl_buffer = round(1.5 * atr_14, 2)
+        sl_buffer = round(1.5 * (atr_14 if atr_14 > 0 else current_price * 0.015), 2)
 
         if action == "BUY":
             stop_loss = round(current_price - sl_buffer, 2)
-            risk_per_share = round(current_price - stop_loss, 2)
+            # If DL predicted a higher low bound above stop loss, calibrate for tighter protection
+            if dl_bounds and "predicted_low" in dl_bounds and dl_bounds["predicted_low"] > 0:
+                dl_low = dl_bounds["predicted_low"]
+                if dl_low < current_price:
+                    stop_loss = round(max(stop_loss, dl_low * 0.995), 2)
+
+            risk_per_share = max(0.1, round(current_price - stop_loss, 2))
             target_1 = round(current_price + (2.0 * risk_per_share), 2)  # 1:2 R:R
+            
+            # Incorporate DL predicted high if it offers superior expansion
+            if dl_bounds and "predicted_high" in dl_bounds and dl_bounds["predicted_high"] > current_price:
+                target_1 = round(max(target_1, dl_bounds["predicted_high"]), 2)
+
             target_2 = round(current_price + (3.0 * risk_per_share), 2)  # 1:3 R:R
         else:  # SELL / Short
             stop_loss = round(current_price + sl_buffer, 2)
-            risk_per_share = round(stop_loss - current_price, 2)
+            if dl_bounds and "predicted_high" in dl_bounds and dl_bounds["predicted_high"] > current_price:
+                stop_loss = round(max(stop_loss, dl_bounds["predicted_high"] * 1.005), 2)
+
+            risk_per_share = max(0.1, round(stop_loss - current_price, 2))
             target_1 = round(current_price - (2.0 * risk_per_share), 2)
+            if dl_bounds and "predicted_low" in dl_bounds and dl_bounds["predicted_low"] < current_price:
+                target_1 = round(min(target_1, dl_bounds["predicted_low"]), 2)
+
             target_2 = round(current_price - (3.0 * risk_per_share), 2)
 
         risk_reward_ratio = round((abs(target_1 - current_price)) / (risk_per_share if risk_per_share > 0 else 1), 2)

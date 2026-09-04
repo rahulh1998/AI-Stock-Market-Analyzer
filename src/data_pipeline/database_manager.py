@@ -66,6 +66,24 @@ class DatabaseManager:
                 PRIMARY KEY (ticker, timestamp)
             )
         """)
+
+        # 3. Multi-Horizon Sentiment Table (1h, 1d, 1w)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS multi_horizon_sentiment (
+                ticker TEXT,
+                timestamp DATETIME,
+                sentiment_1h REAL,
+                sentiment_1d REAL,
+                sentiment_1w REAL,
+                label_1h TEXT,
+                label_1d TEXT,
+                label_1w TEXT,
+                divergence_flag TEXT,
+                summary TEXT,
+                headlines_count INTEGER,
+                PRIMARY KEY (ticker, timestamp)
+            )
+        """)
         self.conn.commit()
 
     def _ensure_config_exists(self):
@@ -211,6 +229,43 @@ class DatabaseManager:
         if df.empty:
             return {"sentiment_score": 0.0, "sentiment_label": "NEUTRAL", "summary": "No recent sentiment data."}
         return df.iloc[0].to_dict()
+
+    def save_multi_horizon_sentiment(self, ticker: str, timestamp: str, s_1h: float, s_1d: float, s_1w: float,
+                                     l_1h: str, l_1d: str, l_1w: str, divergence: str, summary: str, count: int):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO multi_horizon_sentiment 
+            (ticker, timestamp, sentiment_1h, sentiment_1d, sentiment_1w, label_1h, label_1d, label_1w, divergence_flag, summary, headlines_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (ticker, timestamp, s_1h, s_1d, s_1w, l_1h, l_1d, l_1w, divergence, summary, count))
+        self.conn.commit()
+
+    def get_latest_multi_horizon_sentiment(self, ticker: str) -> dict:
+        clean_ticker = ticker.split('.')[0].upper()
+        query = f"SELECT * FROM multi_horizon_sentiment WHERE ticker = '{clean_ticker}' ORDER BY timestamp DESC LIMIT 1"
+        try:
+            df = pd.read_sql(query, self.conn)
+            if df.empty:
+                return {
+                    "sentiment_1h": 0.0, "label_1h": "NEUTRAL",
+                    "sentiment_1d": 0.0, "label_1d": "NEUTRAL",
+                    "sentiment_1w": 0.0, "label_1w": "NEUTRAL",
+                    "divergence_flag": "NONE",
+                    "summary": "No multi-horizon sentiment calculated yet.",
+                    "headlines_count": 0,
+                    "timestamp": None
+                }
+            return df.iloc[0].to_dict()
+        except Exception:
+            return {
+                "sentiment_1h": 0.0, "label_1h": "NEUTRAL",
+                "sentiment_1d": 0.0, "label_1d": "NEUTRAL",
+                "sentiment_1w": 0.0, "label_1w": "NEUTRAL",
+                "divergence_flag": "NONE",
+                "summary": "No multi-horizon sentiment calculated yet.",
+                "headlines_count": 0,
+                "timestamp": None
+            }
 
 
     def update_today_live_data(self, ticker: str):
