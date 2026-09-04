@@ -24,6 +24,7 @@ from src.ml_engine.deep_learning_predictor import DeepLearningPredictor
 from src.ml_engine.candle_patterns import detect_candlestick_patterns
 from src.quant_engine.risk_math import RiskEngine
 from src.quant_engine.pricing_engine import InstitutionalPricingEngine
+from src.quant_engine.intraday_signals import IntradaySignalEngine
 from src.agents.state import AgentTradingState
 from src.agents.agent_nodes import technical_agent, rag_agent, sentiment_agent, bear_advocate, lead_synthesizer
 from src.rag_engine.retriever import StrategyRetriever
@@ -50,10 +51,11 @@ def get_services():
     dl_predictor = DeepLearningPredictor()
     risk_engine = RiskEngine()
     pricing_engine = InstitutionalPricingEngine(num_simulations=1000, forecast_steps=5)
+    intraday_engine = IntradaySignalEngine(supertrend_len=10, supertrend_mult=2.5)
     rag_retriever = StrategyRetriever()
-    return fetcher, db_mgr, sentiment_eng, dl_predictor, risk_engine, pricing_engine, rag_retriever
+    return fetcher, db_mgr, sentiment_eng, dl_predictor, risk_engine, pricing_engine, intraday_engine, rag_retriever
 
-fetcher, db_mgr, sentiment_eng, dl_predictor, risk_engine, pricing_engine, rag_retriever = get_services()
+fetcher, db_mgr, sentiment_eng, dl_predictor, risk_engine, pricing_engine, intraday_engine, rag_retriever = get_services()
 
 @st.cache_data
 def load_watchlist() -> list:
@@ -82,7 +84,7 @@ risk_engine.max_risk_per_trade_pct = user_risk_pct
 
 # --- Header Section ---
 st.title("📈 AI-Powered NSE Stock Market Analyzer")
-st.caption("Institutional Intelligence Terminal | Microstructure VWAP • Merton Jump-Diffusion Monte Carlo • Bi-LSTM Sequences • Multi-Horizon Sentiment • Multi-Agent Debate")
+st.caption("Institutional Intelligence Terminal | Live Supertrend & VWAP Buy/Sell Markers • Merton Jump-Diffusion • Bi-LSTM Sequences • Multi-Horizon Sentiment")
 
 tab1, tab2 = st.tabs(["📊 Watchlist Scanner & Live Heatmap", "🔍 Single-Stock Deep Dive"])
 
@@ -185,13 +187,17 @@ with tab2:
     st.subheader(f"🔍 Deep Dive Analysis: **{selected_ticker}**")
 
     # Load Candles & Historical Data
-    with st.spinner(f"Loading {timeframe} market data and running Institutional Pricing Engine for {selected_ticker}..."):
+    with st.spinner(f"Scanning live indicators, Supertrend, and buy/sell markers for {selected_ticker}..."):
         df_candles = fetcher.fetch_intraday_data(selected_ticker, period=selected_period, interval=timeframe)
         live_quote = fetcher.fetch_live_quote_single(selected_ticker)
         
         df_daily = db_mgr.get_stock_data(selected_ticker)
         if df_daily.empty and not df_candles.empty:
             df_daily = df_candles
+
+    # Run Intraday Signal Engine (Supertrend, VWAP, EMA Cross, Volume Surge Markers)
+    df_enriched_candles, buy_markers, sell_markers = intraday_engine.generate_markers(df_candles)
+    live_intraday_status = intraday_engine.get_latest_live_status(df_candles)
 
     # Latest Sentiment & Price Divergence
     sentiment_data = sentiment_eng.analyze_ticker(selected_ticker, live_pct_change=live_quote.get("pct_change", 0.0))
@@ -262,14 +268,15 @@ with tab2:
     elif not df_daily.empty and 'ATRr_14' in df_daily.columns:
         atr_val = float(df_daily['ATRr_14'].iloc[-1])
 
-    # Action Determination incorporating Pricing Engine Alpha Edge
+    # Action Determination incorporating Intraday Supertrend/VWAP + Pricing Edge
     dl_bias = dl_bounds.get("trajectory_bias", "NEUTRAL")
     mispricing_edge = pricing_info.get("mispricing_edge_pct", 0.0)
     regime = pricing_info.get("market_regime", "MEAN_REVERTING")
+    live_bias = live_intraday_status.get("bias", "YELLOW")
 
-    if (mispricing_edge >= 0.5 or ml_prob > 54.0 or dl_bias == "BULLISH") and s_1d >= -0.1 and regime != "HIGH_VOLATILITY_SHOCK":
+    if "BULLISH" in live_bias or (mispricing_edge >= 0.5 and ml_prob > 52.0 and s_1d >= -0.1):
         action_decision = "BUY"
-    elif mispricing_edge <= -0.7 or ml_prob < 46.0 or dl_bias == "BEARISH" or s_1d < -0.3:
+    elif "BEARISH" in live_bias or (mispricing_edge <= -0.7 or ml_prob < 46.0 or s_1d < -0.3):
         action_decision = "SELL"
     else:
         action_decision = "HOLD"
@@ -299,14 +306,57 @@ with tab2:
     # --- Top Metrics Bar ---
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Live Market Price", f"₹{current_price:.2f}", f"{live_quote.get('pct_change', 0.0):+.2f}%")
-    m2.metric("Institutional Fair Value", f"₹{pricing_info.get('institutional_fair_value', current_price):.2f}", f"Edge: {mispricing_edge:+.2f}%")
-    m3.metric("Deep Learning Target", f"₹{dl_bounds.get('predicted_close', current_price):.2f}", f"Envelope: ₹{dl_bounds.get('predicted_low', 0):.0f} – ₹{dl_bounds.get('predicted_high', 0):.0f}")
-    m4.metric("Market Regime", f"{regime.replace('_', ' ')}", f"Conf: {pricing_info.get('regime_confidence', 75)}%")
+    m2.metric("Intraday Trend Bias", f"{live_intraday_status.get('supertrend_state', 'BULLISH')}", f"VWAP: ₹{live_intraday_status.get('vwap_level', current_price)}")
+    m3.metric("Institutional Fair Value", f"₹{pricing_info.get('institutional_fair_value', current_price):.2f}", f"Edge: {mispricing_edge:+.2f}%")
+    m4.metric("Deep Learning Target", f"₹{dl_bounds.get('predicted_close', current_price):.2f}", f"Corridor: ₹{dl_bounds.get('predicted_low', 0):.0f} – ₹{dl_bounds.get('predicted_high', 0):.0f}")
     m5.metric("System Signal", f"{action_decision}", f"Guardrail: {'PASS' if guardrail_res['is_approved'] else 'VETO'}")
+
+    # ==============================================================================
+    # ⚡ REAL-TIME INTRADAY EXECUTION BANNER & MARKERS
+    # ==============================================================================
+    with st.container():
+        st.markdown("### ⚡ Live Intraday Execution Signal & Key Markers")
+        col_intra1, col_intra2 = st.columns([3, 2])
+
+        with col_intra1:
+            st.info(f"**Current State:** {live_intraday_status.get('bias', 'NEUTRAL')} | **Action:** {live_intraday_status.get('recommended_action')}")
+            sub_c1, sub_c2, sub_c3 = st.columns(3)
+            sub_c1.metric("Supertrend Line", f"₹{live_intraday_status.get('supertrend_level', 0):.2f}")
+            sub_c2.metric("Distance to VWAP", f"{live_intraday_status.get('distance_to_vwap_pct', 0.0):+.2f}%")
+            sub_c3.metric("Volume Surge Factor", f"{live_intraday_status.get('volume_surge_ratio', 1.0):.2f}x")
+
+        with col_intra2:
+            st.markdown("#### 🎯 Latest Triggered Markers")
+            rec_b = live_intraday_status.get("recent_buy_signal")
+            rec_s = live_intraday_status.get("recent_sell_signal")
+            if rec_b:
+                st.success(f"🟢 **Latest BUY Marker:** ₹{rec_b['price']} | SL: ₹{rec_b['stop_loss']} | T1: ₹{rec_b['target_1']} ({rec_b['trigger_type']})")
+            else:
+                st.write("⚪ No recent BUY trigger in this session.")
+
+            if rec_s:
+                st.error(f"🔴 **Latest SELL Marker:** ₹{rec_s['price']} | SL: ₹{rec_s['stop_loss']} | T1: ₹{rec_s['target_1']} ({rec_s['trigger_type']})")
+            else:
+                st.write("⚪ No recent SELL trigger in this session.")
 
     # Divergence Warning Banner
     if "DIVERGENCE" in div_flag:
         st.warning(f"⚠️ **Sentiment-Price Divergence Detected**: {div_flag}")
+
+    # ==============================================================================
+    # 📊 INTERACTIVE CANDLESTICK CHART WITH REAL-TIME BUY/SELL MARKERS
+    # ==============================================================================
+    st.subheader(f"📊 {selected_ticker} ({timeframe}) Interactive Chart with Live Buy/Sell Markers")
+    fig = render_candlestick(
+        df=df_enriched_candles,
+        ticker=selected_ticker,
+        levels=levels,
+        dl_trajectory=dl_bounds,
+        pricing_envelope=pricing_info,
+        buy_markers=buy_markers,
+        sell_markers=sell_markers
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
     # ==============================================================================
     # 🏛️ INSTITUTIONAL PRICING ENGINE SCORECARD
@@ -345,16 +395,6 @@ with tab2:
             st.markdown(f"**Momentum Factor:** {f_score.get('momentum_factor', 0.0):+0.1f}")
             st.markdown(f"**Volume Force Factor:** {f_score.get('volume_force_factor', 0.0):+0.1f}")
             st.caption(f"Mean Reversion Factor: {f_score.get('mean_reversion_factor', 0.0):+0.1f}")
-
-    # --- Candlestick Chart ---
-    st.subheader(f"📊 {selected_ticker} ({timeframe}) Institutional Chart & Execution Envelope")
-    fig = render_candlestick(
-        df_candles, selected_ticker,
-        levels=levels,
-        dl_trajectory=dl_bounds,
-        pricing_envelope=pricing_info
-    )
-    st.plotly_chart(fig, use_container_width=True)
 
     # --- Quantitative Execution & Guardrails ---
     col_exec1, col_exec2, col_exec3 = st.columns(3)
