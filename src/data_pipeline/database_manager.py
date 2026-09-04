@@ -19,7 +19,7 @@ class DatabaseManager:
     def __init__(self):
         """Initializes SQLite connection, ensures schema is up to date, and loads watchlist."""
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-        self.conn = sqlite3.connect(DB_PATH)
+        self.conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30.0)
         self._create_tables()
         self._ensure_config_exists()
         self.watchlist = self._load_watchlist()
@@ -194,10 +194,14 @@ class DatabaseManager:
                 logger.error(f"Error processing {ticker}: {e}. Skipping...")
                 continue
 
+    def get_connection(self):
+        return sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30.0)
+
     def get_stock_data(self, ticker: str) -> pd.DataFrame:
         clean_ticker = ticker.split('.')[0].upper()
         query = f"SELECT timestamp, open, high, low, close, adj_close, volume FROM daily_ohlcv WHERE ticker = '{clean_ticker}' ORDER BY timestamp ASC"
-        df = pd.read_sql(query, self.conn)
+        with self.get_connection() as conn:
+            df = pd.read_sql(query, conn)
         
         if df.empty:
             return df
@@ -216,35 +220,39 @@ class DatabaseManager:
         return df
 
     def save_sentiment(self, ticker: str, timestamp: str, score: float, label: str, summary: str):
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            INSERT OR REPLACE INTO stock_sentiment (ticker, timestamp, sentiment_score, sentiment_label, summary)
-            VALUES (?, ?, ?, ?, ?)
-        """, (ticker, timestamp, score, label, summary))
-        self.conn.commit()
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO stock_sentiment (ticker, timestamp, sentiment_score, sentiment_label, summary)
+                VALUES (?, ?, ?, ?, ?)
+            """, (ticker, timestamp, score, label, summary))
+            conn.commit()
 
     def get_latest_sentiment(self, ticker: str) -> dict:
         query = f"SELECT timestamp, sentiment_score, sentiment_label, summary FROM stock_sentiment WHERE ticker = '{ticker}' ORDER BY timestamp DESC LIMIT 1"
-        df = pd.read_sql(query, self.conn)
+        with self.get_connection() as conn:
+            df = pd.read_sql(query, conn)
         if df.empty:
             return {"sentiment_score": 0.0, "sentiment_label": "NEUTRAL", "summary": "No recent sentiment data."}
         return df.iloc[0].to_dict()
 
     def save_multi_horizon_sentiment(self, ticker: str, timestamp: str, s_1h: float, s_1d: float, s_1w: float,
                                      l_1h: str, l_1d: str, l_1w: str, divergence: str, summary: str, count: int):
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            INSERT OR REPLACE INTO multi_horizon_sentiment 
-            (ticker, timestamp, sentiment_1h, sentiment_1d, sentiment_1w, label_1h, label_1d, label_1w, divergence_flag, summary, headlines_count)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (ticker, timestamp, s_1h, s_1d, s_1w, l_1h, l_1d, l_1w, divergence, summary, count))
-        self.conn.commit()
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO multi_horizon_sentiment 
+                (ticker, timestamp, sentiment_1h, sentiment_1d, sentiment_1w, label_1h, label_1d, label_1w, divergence_flag, summary, headlines_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (ticker, timestamp, s_1h, s_1d, s_1w, l_1h, l_1d, l_1w, divergence, summary, count))
+            conn.commit()
 
     def get_latest_multi_horizon_sentiment(self, ticker: str) -> dict:
         clean_ticker = ticker.split('.')[0].upper()
         query = f"SELECT * FROM multi_horizon_sentiment WHERE ticker = '{clean_ticker}' ORDER BY timestamp DESC LIMIT 1"
         try:
-            df = pd.read_sql(query, self.conn)
+            with self.get_connection() as conn:
+                df = pd.read_sql(query, conn)
             if df.empty:
                 return {
                     "sentiment_1h": 0.0, "label_1h": "NEUTRAL",

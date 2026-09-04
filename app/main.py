@@ -23,6 +23,7 @@ from src.sentiment_engine.sentiment_analyzer import MultiHorizonSentimentAnalyze
 from src.ml_engine.deep_learning_predictor import DeepLearningPredictor
 from src.ml_engine.candle_patterns import detect_candlestick_patterns
 from src.quant_engine.risk_math import RiskEngine
+from src.quant_engine.pricing_engine import InstitutionalPricingEngine
 from src.agents.state import AgentTradingState
 from src.agents.agent_nodes import technical_agent, rag_agent, sentiment_agent, bear_advocate, lead_synthesizer
 from src.rag_engine.retriever import StrategyRetriever
@@ -48,10 +49,11 @@ def get_services():
     sentiment_eng = MultiHorizonSentimentAnalyzer()
     dl_predictor = DeepLearningPredictor()
     risk_engine = RiskEngine()
+    pricing_engine = InstitutionalPricingEngine(num_simulations=1000, forecast_steps=5)
     rag_retriever = StrategyRetriever()
-    return fetcher, db_mgr, sentiment_eng, dl_predictor, risk_engine, rag_retriever
+    return fetcher, db_mgr, sentiment_eng, dl_predictor, risk_engine, pricing_engine, rag_retriever
 
-fetcher, db_mgr, sentiment_eng, dl_predictor, risk_engine, rag_retriever = get_services()
+fetcher, db_mgr, sentiment_eng, dl_predictor, risk_engine, pricing_engine, rag_retriever = get_services()
 
 @st.cache_data
 def load_watchlist() -> list:
@@ -80,7 +82,7 @@ risk_engine.max_risk_per_trade_pct = user_risk_pct
 
 # --- Header Section ---
 st.title("📈 AI-Powered NSE Stock Market Analyzer")
-st.caption("Institutional Intelligence Terminal | PyTorch Deep Learning Sequences • Tabular ML Ensembles • Multi-Horizon Sentiment (1h/1d/1w) • LangGraph Multi-Agent Debate")
+st.caption("Institutional Intelligence Terminal | Microstructure VWAP • Merton Jump-Diffusion Monte Carlo • Bi-LSTM Sequences • Multi-Horizon Sentiment • Multi-Agent Debate")
 
 tab1, tab2 = st.tabs(["📊 Watchlist Scanner & Live Heatmap", "🔍 Single-Stock Deep Dive"])
 
@@ -182,12 +184,11 @@ with tab1:
 with tab2:
     st.subheader(f"🔍 Deep Dive Analysis: **{selected_ticker}**")
 
-    # Load Candles & Data
-    with st.spinner(f"Loading {timeframe} market data and running ML/DL inference for {selected_ticker}..."):
+    # Load Candles & Historical Data
+    with st.spinner(f"Loading {timeframe} market data and running Institutional Pricing Engine for {selected_ticker}..."):
         df_candles = fetcher.fetch_intraday_data(selected_ticker, period=selected_period, interval=timeframe)
         live_quote = fetcher.fetch_live_quote_single(selected_ticker)
         
-        # Pull historical daily data for feature engineering / ML
         df_daily = db_mgr.get_stock_data(selected_ticker)
         if df_daily.empty and not df_candles.empty:
             df_daily = df_candles
@@ -244,7 +245,13 @@ with tab2:
         except Exception:
             ml_prob = 50.0
 
-    # Risk Engine ATR Calculation
+    # Institutional Pricing Engine Envelope
+    pricing_info = pricing_engine.calculate_fair_value_envelope(
+        df=df_daily if not df_daily.empty else df_candles,
+        dl_forecast=dl_bounds,
+        ml_prob=ml_prob
+    )
+
     current_price = live_quote.get("price", 0.0)
     if current_price <= 0 and not df_candles.empty:
         current_price = float(df_candles['close'].iloc[-1])
@@ -255,11 +262,14 @@ with tab2:
     elif not df_daily.empty and 'ATRr_14' in df_daily.columns:
         atr_val = float(df_daily['ATRr_14'].iloc[-1])
 
-    # Action Determination
+    # Action Determination incorporating Pricing Engine Alpha Edge
     dl_bias = dl_bounds.get("trajectory_bias", "NEUTRAL")
-    if (ml_prob > 55.0 or dl_bias == "BULLISH") and s_1d >= 0.0:
+    mispricing_edge = pricing_info.get("mispricing_edge_pct", 0.0)
+    regime = pricing_info.get("market_regime", "MEAN_REVERTING")
+
+    if (mispricing_edge >= 0.5 or ml_prob > 54.0 or dl_bias == "BULLISH") and s_1d >= -0.1 and regime != "HIGH_VOLATILITY_SHOCK":
         action_decision = "BUY"
-    elif (ml_prob < 45.0 or dl_bias == "BEARISH") or s_1d < -0.3:
+    elif mispricing_edge <= -0.7 or ml_prob < 46.0 or dl_bias == "BEARISH" or s_1d < -0.3:
         action_decision = "SELL"
     else:
         action_decision = "HOLD"
@@ -286,21 +296,64 @@ with tab2:
         technical_snapshot=tech_snapshot
     )
 
-    # --- Metrics Bar ---
+    # --- Top Metrics Bar ---
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Live Market Price", f"₹{current_price:.2f}", f"{live_quote.get('pct_change', 0.0):+.2f}%")
-    m2.metric("ML Upward Prob", f"{ml_prob:.1f}%", delta="Bullish Edge" if ml_prob > 52 else ("Bearish Bias" if ml_prob < 48 else "Neutral"))
+    m2.metric("Institutional Fair Value", f"₹{pricing_info.get('institutional_fair_value', current_price):.2f}", f"Edge: {mispricing_edge:+.2f}%")
     m3.metric("Deep Learning Target", f"₹{dl_bounds.get('predicted_close', current_price):.2f}", f"Envelope: ₹{dl_bounds.get('predicted_low', 0):.0f} – ₹{dl_bounds.get('predicted_high', 0):.0f}")
-    m4.metric("1-Day Sentiment", f"{sentiment_data.get('label_1d', 'NEUTRAL')}", f"Score: {s_1d:+.2f}")
+    m4.metric("Market Regime", f"{regime.replace('_', ' ')}", f"Conf: {pricing_info.get('regime_confidence', 75)}%")
     m5.metric("System Signal", f"{action_decision}", f"Guardrail: {'PASS' if guardrail_res['is_approved'] else 'VETO'}")
 
     # Divergence Warning Banner
     if "DIVERGENCE" in div_flag:
         st.warning(f"⚠️ **Sentiment-Price Divergence Detected**: {div_flag}")
 
+    # ==============================================================================
+    # 🏛️ INSTITUTIONAL PRICING ENGINE SCORECARD
+    # ==============================================================================
+    with st.container():
+        st.markdown("### 🏛️ Institutional Pricing Engine Analysis")
+        p_col1, p_col2, p_col3, p_col4 = st.columns(4)
+
+        with p_col1:
+            st.markdown("#### 🎯 Valuation Anchor")
+            st.markdown(f"**Theoretical Fair Value:** ₹{pricing_info.get('institutional_fair_value', current_price):.2f}")
+            st.markdown(f"**Current Market Price:** ₹{current_price:.2f}")
+            st.markdown(f"**Mispricing Edge:** **{mispricing_edge:+.2f}%**")
+            st.caption(f"Status: **{pricing_info.get('valuation_status', 'FAIRLY_VALUED')}**")
+
+        with p_col2:
+            st.markdown("#### 🌊 Microstructure & VWAP")
+            vwap_meta = pricing_info.get("vwap_microstructure", {})
+            st.markdown(f"**Anchored VWAP:** ₹{vwap_meta.get('vwap', current_price):.2f}")
+            st.markdown(f"**VWAP +2σ Band:** ₹{vwap_meta.get('vwap_upper_2s', 0):.2f}")
+            st.markdown(f"**VWAP -2σ Band:** ₹{vwap_meta.get('vwap_lower_2s', 0):.2f}")
+            st.caption(f"Intraday Dispersion: ±{vwap_meta.get('vwap_dispersion', 1.0)}%")
+
+        with p_col3:
+            st.markdown("#### 🎲 Jump-Diffusion Simulation")
+            mc = pricing_info.get("monte_carlo_simulation", {})
+            st.markdown(f"**Expected Price (5-day):** ₹{mc.get('sim_expected_price', current_price):.2f}")
+            st.markdown(f"**Upside 95th Percentile:** ₹{mc.get('sim_p95_upside', current_price):.2f}")
+            st.markdown(f"**5-Day 95% VaR:** **{mc.get('var_95_pct', 0.0)}%** (₹{mc.get('var_95_rupees', 0.0)})")
+            st.caption(f"Monte Carlo Probability of Gain: **{mc.get('monte_carlo_prob_up', 50)}%**")
+
+        with p_col4:
+            st.markdown("#### ⚡ Multi-Factor Scorecard")
+            f_score = pricing_info.get("factor_scores", {})
+            st.markdown(f"**Composite Alpha:** **{f_score.get('composite_alpha', 0.0):+0.1f}** / 100")
+            st.markdown(f"**Momentum Factor:** {f_score.get('momentum_factor', 0.0):+0.1f}")
+            st.markdown(f"**Volume Force Factor:** {f_score.get('volume_force_factor', 0.0):+0.1f}")
+            st.caption(f"Mean Reversion Factor: {f_score.get('mean_reversion_factor', 0.0):+0.1f}")
+
     # --- Candlestick Chart ---
-    st.subheader(f"📊 {selected_ticker} ({timeframe}) Interactive Candlestick Chart")
-    fig = render_candlestick(df_candles, selected_ticker, levels=levels, dl_trajectory=dl_bounds)
+    st.subheader(f"📊 {selected_ticker} ({timeframe}) Institutional Chart & Execution Envelope")
+    fig = render_candlestick(
+        df_candles, selected_ticker,
+        levels=levels,
+        dl_trajectory=dl_bounds,
+        pricing_envelope=pricing_info
+    )
     st.plotly_chart(fig, use_container_width=True)
 
     # --- Quantitative Execution & Guardrails ---
@@ -400,7 +453,13 @@ with tab2:
                 "sentiment_1d": s_1d,
                 "sentiment_1w": s_1w,
                 "divergence_flag": div_flag,
-                "dl_trajectory": dl_bounds
+                "dl_trajectory": dl_bounds,
+                "institutional_fair_value": pricing_info.get("institutional_fair_value", current_price),
+                "mispricing_edge_pct": mispricing_edge,
+                "valuation_status": pricing_info.get("valuation_status", "FAIRLY_VALUED"),
+                "market_regime": regime,
+                "auction_corridor": pricing_info.get("auction_corridor", {}),
+                "monte_carlo_var95": pricing_info.get("monte_carlo_simulation", {}).get("var_95_pct", 3.0)
             }
 
             # Run sequential assembly line

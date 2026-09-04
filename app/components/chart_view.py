@@ -4,17 +4,21 @@ import pandas as pd
 from typing import Optional, Dict, Any
 
 def render_candlestick(df: pd.DataFrame, ticker: str, levels: Optional[Dict[str, Any]] = None, 
-                       dl_trajectory: Optional[Dict[str, Any]] = None) -> go.Figure:
+                       dl_trajectory: Optional[Dict[str, Any]] = None,
+                       pricing_envelope: Optional[Dict[str, Any]] = None) -> go.Figure:
     """
-    Generates an institutional-grade dual-panel Plotly chart (OHLCV + Volume)
-    with moving averages, ATR execution levels, and Deep Learning forecast trajectory.
+    Institutional dual-panel chart (OHLCV + Volume) with:
+    - Moving averages (9 EMA, 21 EMA, 50 SMA, 200 SMA)
+    - Institutional Fair Value & VWAP ±1σ, ±2σ bands
+    - Camarilla Pivot Breakout/Breakdown levels
+    - Deep Learning Volatility Corridor
+    - ATR Execution zones (Entry, SL, Targets)
     """
     if df.empty:
         fig = go.Figure()
         fig.update_layout(title=f"No data available for {ticker}", template="plotly_dark")
         return fig
 
-    # Create subplots: Row 1 = Price + Indicators, Row 2 = Volume
     fig = make_subplots(
         rows=2, cols=1,
         shared_xaxes=True,
@@ -35,27 +39,39 @@ def render_candlestick(df: pd.DataFrame, ticker: str, levels: Optional[Dict[str,
     ), row=1, col=1)
 
     # 2. Moving Averages
-    if 'EMA_9' in df.columns:
-        fig.add_trace(go.Scatter(x=df['timestamp'], y=df['EMA_9'], mode='lines', name='9 EMA', line=dict(color='#29b6f6', width=1.2)), row=1, col=1)
-    elif 'ema_9' in df.columns:
-        fig.add_trace(go.Scatter(x=df['timestamp'], y=df['ema_9'], mode='lines', name='9 EMA', line=dict(color='#29b6f6', width=1.2)), row=1, col=1)
+    for col_name, color, label in [('EMA_9', '#29b6f6', '9 EMA'), ('ema_9', '#29b6f6', '9 EMA'),
+                                    ('EMA_21', '#ab47bc', '21 EMA'), ('ema_21', '#ab47bc', '21 EMA'),
+                                    ('SMA_50', '#ffa726', '50 SMA'), ('sma_50', '#ffa726', '50 SMA'),
+                                    ('SMA_200', '#ef5350', '200 SMA'), ('sma_200', '#ef5350', '200 SMA')]:
+        if col_name in df.columns:
+            fig.add_trace(go.Scatter(x=df['timestamp'], y=df[col_name], mode='lines', name=label,
+                                     line=dict(color=color, width=1.3 if '50' not in label and '200' not in label else 1.8)), row=1, col=1)
 
-    if 'EMA_21' in df.columns:
-        fig.add_trace(go.Scatter(x=df['timestamp'], y=df['EMA_21'], mode='lines', name='21 EMA', line=dict(color='#ab47bc', width=1.2)), row=1, col=1)
-    elif 'ema_21' in df.columns:
-        fig.add_trace(go.Scatter(x=df['timestamp'], y=df['ema_21'], mode='lines', name='21 EMA', line=dict(color='#ab47bc', width=1.2)), row=1, col=1)
+    # 3. Institutional Fair Value & VWAP Bands (from Pricing Engine)
+    if pricing_envelope:
+        fv = pricing_envelope.get("institutional_fair_value")
+        if fv and fv > 0:
+            fig.add_hline(y=fv, line_dash="solid", line_color="#ffd700", line_width=2.0,
+                          annotation_text=f"Fair Value ₹{fv}", row=1, col=1)
 
-    if 'SMA_50' in df.columns:
-        fig.add_trace(go.Scatter(x=df['timestamp'], y=df['SMA_50'], mode='lines', name='50 SMA', line=dict(color='#ffa726', width=1.5)), row=1, col=1)
-    elif 'sma_50' in df.columns:
-        fig.add_trace(go.Scatter(x=df['timestamp'], y=df['sma_50'], mode='lines', name='50 SMA', line=dict(color='#ffa726', width=1.5)), row=1, col=1)
+        vwap_data = pricing_envelope.get("vwap_microstructure", {})
+        if vwap_data and "vwap" in vwap_data:
+            vwap_val = vwap_data["vwap"]
+            fig.add_hline(y=vwap_val, line_dash="dot", line_color="#00e5ff",
+                          annotation_text=f"VWAP ₹{vwap_val}", row=1, col=1)
+            
+            # VWAP ±2σ Bands
+            u2 = vwap_data.get("vwap_upper_2s")
+            l2 = vwap_data.get("vwap_lower_2s")
+            if u2 and l2:
+                fig.add_hline(y=u2, line_dash="dash", line_color="#00bcd4", line_width=1.0,
+                              annotation_text=f"VWAP +2σ ₹{u2}", row=1, col=1)
+                fig.add_hline(y=l2, line_dash="dash", line_color="#00bcd4", line_width=1.0,
+                              annotation_text=f"VWAP -2σ ₹{l2}", row=1, col=1)
+                # Shaded VWAP normal trading zone
+                fig.add_hrect(y0=l2, y1=u2, fillcolor="#00e5ff", opacity=0.04, layer="below", row=1, col=1)
 
-    if 'SMA_200' in df.columns:
-        fig.add_trace(go.Scatter(x=df['timestamp'], y=df['SMA_200'], mode='lines', name='200 SMA', line=dict(color='#ef5350', width=1.8, dash='dot')), row=1, col=1)
-    elif 'sma_200' in df.columns:
-        fig.add_trace(go.Scatter(x=df['timestamp'], y=df['sma_200'], mode='lines', name='200 SMA', line=dict(color='#ef5350', width=1.8, dash='dot')), row=1, col=1)
-
-    # 3. Volume Bar Trace
+    # 4. Volume Bar Trace
     colors = ['#26a69a' if c >= o else '#ef5350' for c, o in zip(df['close'], df['open'])]
     fig.add_trace(go.Bar(
         x=df['timestamp'],
@@ -65,20 +81,18 @@ def render_candlestick(df: pd.DataFrame, ticker: str, levels: Optional[Dict[str,
         opacity=0.65
     ), row=2, col=1)
 
-    # 4. Deep Learning Trajectory Envelope (if available)
+    # 5. Deep Learning Trajectory Envelope
     if dl_trajectory and dl_trajectory.get('predicted_close', 0) > 0:
-        latest_time = df['timestamp'].iloc[-1]
-        latest_price = float(df['close'].iloc[-1])
         pred_close = dl_trajectory['predicted_close']
         pred_high = dl_trajectory.get('predicted_high', pred_close)
         pred_low = dl_trajectory.get('predicted_low', pred_close)
 
-        fig.add_hline(y=pred_close, line_dash="dashdot", line_color="#00e5ff",
-                      annotation_text=f"DL Target: ₹{pred_close}", row=1, col=1)
-        fig.add_hrect(y0=pred_low, y1=pred_high, fillcolor="#00e5ff", opacity=0.08,
+        fig.add_hline(y=pred_close, line_dash="dashdot", line_color="#b388ff",
+                      annotation_text=f"DL Target ₹{pred_close}", row=1, col=1)
+        fig.add_hrect(y0=pred_low, y1=pred_high, fillcolor="#b388ff", opacity=0.07,
                       layer="below", line_width=0, row=1, col=1)
 
-    # 5. Execution Levels & Risk/Reward Shading
+    # 6. Execution Levels & Risk/Reward Shading
     if levels and levels.get('stop_loss', 0) > 0:
         entry = levels.get('entry_price', 0.0)
         sl = levels.get('stop_loss', 0.0)
@@ -86,26 +100,24 @@ def render_candlestick(df: pd.DataFrame, ticker: str, levels: Optional[Dict[str,
         t2 = levels.get('target_2', 0.0)
 
         fig.add_hline(y=entry, line_dash="dot", line_color="#ffffff", annotation_text=f"Entry ₹{entry}", row=1, col=1)
-        fig.add_hline(y=sl, line_dash="solid", line_color="#ff5252", annotation_text=f"SL ₹{sl}", row=1, col=1)
-        fig.add_hline(y=t1, line_dash="dash", line_color="#00e676", annotation_text=f"Target 1 ₹{t1}", row=1, col=1)
+        fig.add_hline(y=sl, line_dash="solid", line_color="#ff5252", line_width=1.8, annotation_text=f"SL ₹{sl}", row=1, col=1)
+        fig.add_hline(y=t1, line_dash="dash", line_color="#00e676", line_width=1.8, annotation_text=f"Target 1 ₹{t1}", row=1, col=1)
         if t2 > 0:
-            fig.add_hline(y=t2, line_dash="dash", line_color="#69f0ae", annotation_text=f"Target 2 ₹{t2}", row=1, col=1)
+            fig.add_hline(y=t2, line_dash="dash", line_color="#69f0ae", line_width=1.2, annotation_text=f"Target 2 ₹{t2}", row=1, col=1)
 
         # Risk zone
-        min_risk = min(sl, entry)
-        max_risk = max(sl, entry)
+        min_risk, max_risk = min(sl, entry), max(sl, entry)
         fig.add_hrect(y0=min_risk, y1=max_risk, fillcolor="#ff5252", opacity=0.12, layer="below", row=1, col=1)
 
         # Reward zone
-        min_reward = min(entry, t1)
-        max_reward = max(entry, t1)
+        min_reward, max_reward = min(entry, t1), max(entry, t1)
         fig.add_hrect(y0=min_reward, y1=max_reward, fillcolor="#00e676", opacity=0.12, layer="below", row=1, col=1)
 
     fig.update_layout(
-        title=f"<b>{ticker}</b> — Real-Time Technical Action & Execution Envelope",
+        title=f"<b>{ticker}</b> — Institutional Pricing Architecture & Execution Corridor",
         template="plotly_dark",
         xaxis_rangeslider_visible=False,
-        height=620,
+        height=640,
         margin=dict(l=30, r=30, t=50, b=30),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )

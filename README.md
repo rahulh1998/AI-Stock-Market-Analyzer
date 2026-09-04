@@ -118,18 +118,26 @@ flowchart TD
 - **`model_trainer.py`**:
   - Standalone baseline trainer using `XGBClassifier` with chronological 80/20 train/test split.
   - Predicts whether $Close_{t+1} > Close_{t}$.
+- **`deep_learning_predictor.py`**:
+  - 2-layer Bidirectional LSTM (Bi-LSTM) sequence model with dropout and residual linear heads.
+  - Takes 30-period normalized sequential tensors of Open, High, Low, Close, Volume, 1d Return, Volatility, and RSI.
+  - Forecasts the continuous multi-step price envelope: **Predicted Close, Predicted High, Predicted Low, Expected Return %, and Volatility Spread %**.
 - **`candle_patterns.py`**:
   - High-performance, fully vectorized identification of 15 classic Japanese candlestick patterns using pure pandas and numpy boolean masks.
 
 ---
 
-### 3. Quant & Risk Management Engine (`src/quant_engine/`)
+### 3. Quant Pricing & Risk Management Engine (`src/quant_engine/`)
 
+- **`pricing_engine.py` (Institutional Multi-Factor Equity Pricing Engine)**:
+  - **Volume-Weighted Microstructure**: Session-anchored VWAP and institutional volatility bands ($\pm 1\sigma, \pm 2\sigma$) for mean-reversion exhaustion and value absorption.
+  - **Confluence Pivot Equations**: Camarilla Floor Pivots ($H3, H4, L3, L4$) and Fibonacci extensions ($1.618, 2.618$).
+  - **Stochastic Merton Jump-Diffusion Monte Carlo**: 1,000 simulations over a 5-day horizon modeling Poisson jump intensity ($\lambda$) for news/earnings shocks, computing **Expected Terminal Price**, **95th Percentile Upside**, and **5-Day 95% Value at Risk (VaR)**.
+  - **Multi-Factor Alpha Model**: Composite score spanning Momentum, Volume Force, and Mean Reversion.
+  - **Statistical Market Regime Classification**: Classifies stocks into *Trending Bullish*, *Trending Bearish*, *Mean-Reverting Range*, or *High-Volatility Shock*.
+  - **Theoretical Fair Value & Mispricing Edge**: Computes intrinsic auction center and **Alpha Mispricing %** ($\frac{P_{\text{fair}} - P_{\text{market}}}{P_{\text{market}}} \times 100\%$) to identify undervalued vs. overvalued setups.
 - **`risk_math.py`**:
-  - **Volatility Levels**: Calculates dynamic Stop-Loss and profit targets based on the 14-period Average True Range (ATR):
-    $$\text{Stop Loss Buffer} = 1.5 \times \text{ATR}_{14}$$
-    $$\text{Target 1 (1:2 R:R)} = \text{Entry} \pm (2.0 \times \text{Risk Per Share})$$
-    $$\text{Target 2 (1:3 R:R)} = \text{Entry} \pm (3.0 \times \text{Risk Per Share})$$
+  - **Harmonized Volatility Levels**: Blends ATR volatility buffers ($1.5 \times \text{ATR}_{14}$) with Deep Learning bounds and Camarilla levels for tighter Stop-Losses and 1:2 / 1:3 profit targets.
   - **Position Sizing (1% Risk Rule)**:
     $$\text{Capital at Risk} = \text{Portfolio Size} \times 1\%$$
     $$\text{Position Size (Shares)} = \left\lfloor \frac{\text{Capital at Risk}}{|\text{Entry Price} - \text{Stop Loss}|} \right\rfloor$$

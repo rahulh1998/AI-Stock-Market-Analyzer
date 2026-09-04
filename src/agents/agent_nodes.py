@@ -23,23 +23,30 @@ except Exception as e:
     OLLAMA_AVAILABLE = False
 
 def technical_agent(state: AgentTradingState) -> Dict[str, Any]:
-    logger.info("--- Technical Agent Analyzing ---")
+    logger.info("--- Technical Quantitative & Pricing Agent Analyzing ---")
     ticker = state.get('ticker', 'UNKNOWN')
     price = state.get('current_price', 0.0)
     tech = state.get('technical_data', '')
+    fv = state.get('institutional_fair_value', price)
+    edge = state.get('mispricing_edge_pct', 0.0)
+    regime = state.get('market_regime', 'MEAN_REVERTING')
+
+    pricing_summary = f"LTP: ₹{price} | Fair Value: ₹{fv} ({edge:+.2f}% Edge) | Regime: {regime}"
 
     if OLLAMA_AVAILABLE and llm is not None:
         try:
-            sys_prompt = "You are an expert quantitative technical analyst. Evaluate the provided indicators."
-            user_prompt = f"Ticker: {ticker} @ {price}\nIndicators: {tech}\nIdentify the trend and momentum."
+            sys_prompt = "You are an institutional quantitative equity analyst. Evaluate indicators, Fair Value, and market regime."
+            user_prompt = f"Ticker: {ticker}\nPricing & Regime: {pricing_summary}\nIndicators: {tech}\nDiagnose the trend, value edge, and momentum confluence."
             response = llm.invoke([SystemMessage(content=sys_prompt), HumanMessage(content=user_prompt)])
             return {"technical_analysis": response.content}
         except Exception as e:
             logger.warning(f"Ollama execution failed for technical_agent: {e}")
 
-    # Deterministic fallback analysis
     return {
-        "technical_analysis": f"Quantitative indicators for {ticker} at ₹{price}: {tech}. Structure shows key moving averages and momentum oscillators holding defined levels."
+        "technical_analysis": (
+            f"Quantitative & Pricing Analysis for {ticker}: {pricing_summary}. "
+            f"Indicators: {tech}. Structure indicates asset trading within institutional auction corridor."
+        )
     }
 
 def rag_agent(state: AgentTradingState) -> Dict[str, Any]:
@@ -49,15 +56,15 @@ def rag_agent(state: AgentTradingState) -> Dict[str, Any]:
 
     if OLLAMA_AVAILABLE and llm is not None:
         try:
-            sys_prompt = "You are a trading strategy expert. Validate the technical setup using textbook rules."
-            user_prompt = f"Setup: {tech_analysis}\nRules: {rag_context}\nDoes the setup match textbook rules?"
+            sys_prompt = "You are a trading strategy expert. Validate the setup against classical literature rules."
+            user_prompt = f"Setup: {tech_analysis}\nRules: {rag_context}\nDoes the setup conform to textbook rules?"
             response = llm.invoke([SystemMessage(content=sys_prompt), HumanMessage(content=user_prompt)])
             return {"rag_analysis": response.content}
         except Exception as e:
             logger.warning(f"Ollama execution failed for rag_agent: {e}")
 
     return {
-        "rag_analysis": f"Evaluated against classical literature rules. Pattern conforms to standard breakout and continuation dynamics: {rag_context[:200]}..."
+        "rag_analysis": f"Conforms to established technical principles (Murphy/Nison/O'Neil). Context: {rag_context[:180]}..."
     }
 
 def sentiment_agent(state: AgentTradingState) -> Dict[str, Any]:
@@ -79,14 +86,14 @@ def sentiment_agent(state: AgentTradingState) -> Dict[str, Any]:
     if OLLAMA_AVAILABLE and llm is not None:
         try:
             sys_prompt = "You evaluate multi-horizon news sentiment and price divergences for Indian equities."
-            user_prompt = f"Ticker: {ticker}\nMulti-Horizon Sentiment: {horizon_summary}\nHeadlines: {raw_sent}\nSynthesize the sentiment velocity and divergence."
+            user_prompt = f"Ticker: {ticker}\nMulti-Horizon Sentiment: {horizon_summary}\nHeadlines: {raw_sent}\nSynthesize sentiment velocity and divergence."
             response = llm.invoke([SystemMessage(content=sys_prompt), HumanMessage(content=user_prompt)])
             return {"sentiment_analysis": response.content}
         except Exception as e:
             logger.warning(f"Ollama execution failed for sentiment_agent: {e}")
 
     return {
-        "sentiment_analysis": f"Multi-horizon sentiment synthesis for {ticker}: {horizon_summary}. News flow indicates consistent momentum alignment."
+        "sentiment_analysis": f"Multi-horizon sentiment synthesis for {ticker}: {horizon_summary}."
     }
 
 def bear_advocate(state: AgentTradingState) -> Dict[str, Any]:
@@ -94,63 +101,78 @@ def bear_advocate(state: AgentTradingState) -> Dict[str, Any]:
     tech = state.get('technical_analysis', '')
     sent = state.get('sentiment_analysis', '')
     div_flag = state.get('divergence_flag', 'CONGRUENT')
+    edge = state.get('mispricing_edge_pct', 0.0)
+    var95 = state.get('monte_carlo_var95', 3.0)
+    regime = state.get('market_regime', '')
     dl = state.get('dl_trajectory', {})
 
-    dl_warning = ""
-    if dl and dl.get('predicted_low', 0) > 0:
-        dl_warning = f"Deep Learning warns of potential downside test to ₹{dl['predicted_low']} (Expected Low)."
+    risk_context = (
+        f"Mispricing: {edge:+.2f}% | "
+        f"5-day 95% VaR: {var95:.2f}% | "
+        f"Regime: {regime} | "
+        f"Divergence: {div_flag} | "
+        f"Expected Low: ₹{dl.get('predicted_low', 0)}"
+    )
 
     if OLLAMA_AVAILABLE and llm is not None:
         try:
-            sys_prompt = "You are a risk-averse Bear Advocate. Your job is to find reasons NOT to take this trade."
-            user_prompt = f"Tech: {tech}\nSentiment: {sent}\nDivergence: {div_flag}\nDL Bounds: {dl_warning}\nFind hidden risks and bull traps."
+            sys_prompt = "You are a ruthless, risk-averse Chief Risk Officer / Bear Advocate. Find every reason to reject this trade."
+            user_prompt = f"Tech: {tech}\nSentiment: {sent}\nRisk Profile: {risk_context}\nIdentify hidden traps, liquidation risks, and downside tail risks."
             response = llm.invoke([SystemMessage(content=sys_prompt), HumanMessage(content=user_prompt)])
             return {"bear_objections": response.content}
         except Exception as e:
             logger.warning(f"Ollama execution failed for bear_advocate: {e}")
 
-    objections = f"Key risks identified: Divergence state is {div_flag}. {dl_warning} Overhead supply zones and sudden volatility could invalidate near-term momentum."
+    objections = (
+        f"Vulnerabilities flagged: 5-Day VaR risk is {var95:.2f}%. "
+        f"Asset regime is {regime} with mispricing edge of {edge:+.2f}%. "
+        f"Divergence status ({div_flag}) indicates potential liquidity trap if key support breaks."
+    )
     return {"bear_objections": objections}
 
 def lead_synthesizer(state: AgentTradingState) -> Dict[str, Any]:
-    logger.info("--- Lead Synthesizer Formulating Final Trade ---")
+    logger.info("--- Lead Synthesizer Formulating Final Institutional Trade ---")
     tech = state.get('technical_analysis', '')
     rag = state.get('rag_analysis', '')
     sent = state.get('sentiment_analysis', '')
     bear = state.get('bear_objections', '')
+    edge = state.get('mispricing_edge_pct', 0.0)
+    regime = state.get('market_regime', 'MEAN_REVERTING')
     s_1d = state.get('sentiment_1d', 0.0)
     dl = state.get('dl_trajectory', {})
 
     if OLLAMA_AVAILABLE and llm_json is not None:
         try:
-            sys_prompt = """You are the Lead Portfolio Manager. Review all agent reports and issue a final trade signal.
+            sys_prompt = """You are the Lead Portfolio Manager. Review technical indicators, pricing fair value, sentiment, and bear objections to issue a definitive trade decision.
             You MUST output valid JSON only, using this schema:
             {
               "action": "BUY" | "SELL" | "HOLD",
               "confidence_score": 0-100,
-              "reasoning": "1 sentence summary"
+              "reasoning": "1-2 sentence institutional justification"
             }"""
-            user_prompt = f"Tech: {tech}\nRAG: {rag}\nSentiment: {sent}\nBear: {bear}\nDecision?"
+            user_prompt = f"Tech: {tech}\nRAG: {rag}\nSentiment: {sent}\nBear Objections: {bear}\nFinal Allocation Decision?"
             response = llm_json.invoke([SystemMessage(content=sys_prompt), HumanMessage(content=user_prompt)])
             final_signal = json.loads(response.content)
             return {"final_trade_signal": final_signal}
         except Exception as e:
             logger.warning(f"Ollama execution failed for lead_synthesizer: {e}")
 
-    # Algorithmic fallback synthesis
+    # Quantitative Decision Logic
     ret_pct = dl.get('expected_return_pct', 0.0) if dl else 0.0
-    if ret_pct > 0.5 and s_1d >= 0.0:
+
+    # Institutional Edge: Undervalued + Positive Trajectory + Constructive Regime
+    if edge >= 0.50 and ret_pct > 0.3 and s_1d >= -0.1 and regime != "HIGH_VOLATILITY_SHOCK":
         action = "BUY"
-        conf = min(88, int(70 + ret_pct * 5))
-        reason = f"Favorable deep learning trajectory (+{ret_pct}%) aligned with supportive daily sentiment."
-    elif ret_pct < -0.5 or s_1d < -0.3:
+        conf = min(92, int(72 + edge * 4 + ret_pct * 3))
+        reason = f"Institutional undervaluation ({edge:+.2f}%) aligns with positive DL trajectory (+{ret_pct}%) in {regime} regime."
+    elif edge <= -0.75 or ret_pct < -0.4 or s_1d < -0.3:
         action = "SELL"
-        conf = min(85, int(65 + abs(ret_pct) * 5))
-        reason = f"Downside momentum forecast ({ret_pct}%) coupled with elevated bearish sentiment."
+        conf = min(88, int(68 + abs(edge) * 3 + abs(ret_pct) * 4))
+        reason = f"Asset trading at premium ({edge:+.2f}%) with negative drift and elevated risk."
     else:
         action = "HOLD"
         conf = 60
-        reason = "Market consolidating without clear multi-horizon directional catalyst."
+        reason = f"Asset trading near equilibrium ({edge:+.2f}% mispricing) within {regime}; await clear breakout."
 
     return {
         "final_trade_signal": {
