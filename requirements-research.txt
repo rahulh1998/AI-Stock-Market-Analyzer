@@ -1,0 +1,7 @@
+# Minimal existing stack for the default research workspace (Python 3.12).
+numpy
+pandas
+pandas-ta
+yfinance
+streamlit
+joblib

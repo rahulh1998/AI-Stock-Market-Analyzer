@@ -8,6 +8,7 @@ env/
 # Python Cache
 __pycache__/
 *.pyc
+validation-*.log
 
 # Databases and Local Data
 *.db

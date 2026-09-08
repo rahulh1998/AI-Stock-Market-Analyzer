@@ -23,3 +23,15 @@ psycopg2-binary
 streamlit
 plotly
 python-dotenv
+
+# Imports used by the existing experimental modules
+joblib
+scikit-learn
+xgboost
+lightgbm
+catboost
+torch
+requests
+langchain-ollama
+langchain-chroma
+langchain-community

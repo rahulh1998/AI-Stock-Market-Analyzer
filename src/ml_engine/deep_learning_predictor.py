@@ -211,17 +211,9 @@ class DeepLearningPredictor:
         """
         Runs inference on recent price sequence to output expected price envelope.
         """
-        if df.empty or len(df) < self.seq_len:
-            latest_price = float(df['close'].iloc[-1]) if not df.empty else 100.0
-            return {
-                "predicted_close": latest_price,
-                "predicted_high": latest_price * 1.015,
-                "predicted_low": latest_price * 0.985,
-                "expected_return_pct": 0.0,
-                "volatility_spread_pct": 3.0,
-                "trajectory_bias": "NEUTRAL",
-                "confidence": 50.0
-            }
+        if not self.is_trained or df.empty or len(df) < self.seq_len:
+            return {"available": False, "reason": "Trained weights and sufficient daily history required",
+                    "trajectory_bias": "UNAVAILABLE"}
 
         df_feat = self.prepare_features(df)
         feature_cols = [
@@ -253,6 +245,8 @@ class DeepLearningPredictor:
         confidence = min(95.0, max(50.0, 50.0 + abs(ret_pct) * 8.0))
 
         return {
+            "available": True,
+            "validation_status": "EXPERIMENTAL_UNCALIBRATED",
             "predicted_close": predicted_close,
             "predicted_high": predicted_high,
             "predicted_low": predicted_low,

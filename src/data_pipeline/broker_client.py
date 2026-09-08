@@ -2,7 +2,7 @@ import os
 import time
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 
 import numpy as np
@@ -39,6 +39,10 @@ class MarketDataFetcher:
         clean = ticker.split('.')[0].upper()
         clean = self.ticker_aliases.get(clean, clean)
         return f"{clean}.NS"
+
+    def clear_cache(self):
+        self._cache.clear()
+        self._cache_timestamp.clear()
 
     def _is_cache_valid(self, cache_key: str) -> bool:
         if cache_key not in self._cache or cache_key not in self._cache_timestamp:
@@ -96,7 +100,12 @@ class MarketDataFetcher:
                 "day_high": round(day_high, 2),
                 "day_low": round(day_low, 2),
                 "volume": volume,
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "received_at": datetime.now(timezone.utc).isoformat(),
+                "exchange_timestamp": None,
+                "source": "yahoo_research",
+                "data_quality": "UNVERIFIED" if np.isfinite(price) and price > 0 else "UNAVAILABLE",
+                "execution_eligible": False
             }
 
             self._cache[cache_key] = result
@@ -114,7 +123,11 @@ class MarketDataFetcher:
                 "day_high": 0.0,
                 "day_low": 0.0,
                 "volume": 0,
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "exchange_timestamp": None,
+                "source": "yahoo_research",
+                "data_quality": "UNAVAILABLE",
+                "execution_eligible": False
             }
 
     def fetch_live_quotes_batch(self, tickers: List[str], max_workers: int = 16) -> Dict[str, Dict[str, Any]]:
@@ -160,7 +173,7 @@ class MarketDataFetcher:
             return self._cache[cache_key].copy()
 
         try:
-            df = yf.download(formatted, period=period, interval=interval, progress=False, auto_adjust=False)
+            df = yf.download(formatted, period=period, interval=interval, progress=False, auto_adjust=False, timeout=15)
 
             if df.empty:
                 logger.warning(f"No candlestick data returned for {formatted} ({interval})")
@@ -195,7 +208,9 @@ class MarketDataFetcher:
 
             cols = ['timestamp', 'open', 'high', 'low', 'close', 'adj_close', 'volume']
             existing_cols = [c for c in cols if c in df.columns]
-            df = df[existing_cols].dropna().reset_index(drop=True)
+            # Do not silently remove malformed candles: downstream validation must
+            # expose missing OHLCV rather than bridge over an invisible feed gap.
+            df = df[existing_cols].reset_index(drop=True)
 
             if not df.empty:
                 df = self.enrich_with_indicators(df)
@@ -222,9 +237,7 @@ class MarketDataFetcher:
             df.ta.macd(fast=12, slow=26, signal=9, append=True)
             df.ta.atr(length=14, append=True)
             
-            # Fill or forward fill indicator initial NaN values to avoid wiping out recent bars
-            df.bfill(inplace=True)
-            df.ffill(inplace=True)
+            # Preserve warm-up NaNs. Backfilling would leak future information.
         except Exception as e:
             logger.warning(f"Indicator calculation warning: {e}")
 

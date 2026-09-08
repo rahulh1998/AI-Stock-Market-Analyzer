@@ -1,4 +1,5 @@
 import logging
+import math
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -15,10 +16,14 @@ class RiskEngine:
     def calculate_levels(self, current_price: float, atr_14: float, action: str, 
                          dl_bounds: Optional[Dict[str, float]] = None) -> Dict[str, float]:
         """
-        Calculates ATR-based volatility Stop-Loss and Target levels,
-        harmonized with deep learning sequential trajectory bounds.
+        Calculates deterministic ATR levels. The legacy dl_bounds argument is
+        accepted for compatibility but uncalibrated forecasts do not change risk.
         """
         action = action.upper()
+        if not math.isfinite(current_price) or current_price <= 0:
+            current_price, action = 0.0, "HOLD"
+        if not math.isfinite(atr_14) or atr_14 <= 0:
+            action = "HOLD"
         if action not in ["BUY", "SELL"]:
             return {
                 "entry_price": current_price,
@@ -29,34 +34,23 @@ class RiskEngine:
                 "risk_reward_ratio": 0.0
             }
 
-        # 1.5x ATR buffer accommodates standard volatility swings
+        # Uncalibrated model bounds must not modify deterministic risk levels.
+        # 1.5x ATR is a configurable strategy convention, not a loss guarantee.
         sl_buffer = round(1.5 * (atr_14 if atr_14 > 0 else current_price * 0.015), 2)
 
         if action == "BUY":
             stop_loss = round(current_price - sl_buffer, 2)
-            # If DL predicted a higher low bound above stop loss, calibrate for tighter protection
-            if dl_bounds and "predicted_low" in dl_bounds and dl_bounds["predicted_low"] > 0:
-                dl_low = dl_bounds["predicted_low"]
-                if dl_low < current_price:
-                    stop_loss = round(max(stop_loss, dl_low * 0.995), 2)
 
             risk_per_share = max(0.1, round(current_price - stop_loss, 2))
             target_1 = round(current_price + (2.0 * risk_per_share), 2)  # 1:2 R:R
             
-            # Incorporate DL predicted high if it offers superior expansion
-            if dl_bounds and "predicted_high" in dl_bounds and dl_bounds["predicted_high"] > current_price:
-                target_1 = round(max(target_1, dl_bounds["predicted_high"]), 2)
 
             target_2 = round(current_price + (3.0 * risk_per_share), 2)  # 1:3 R:R
         else:  # SELL / Short
             stop_loss = round(current_price + sl_buffer, 2)
-            if dl_bounds and "predicted_high" in dl_bounds and dl_bounds["predicted_high"] > current_price:
-                stop_loss = round(max(stop_loss, dl_bounds["predicted_high"] * 1.005), 2)
 
             risk_per_share = max(0.1, round(stop_loss - current_price, 2))
             target_1 = round(current_price - (2.0 * risk_per_share), 2)
-            if dl_bounds and "predicted_low" in dl_bounds and dl_bounds["predicted_low"] < current_price:
-                target_1 = round(min(target_1, dl_bounds["predicted_low"]), 2)
 
             target_2 = round(current_price - (3.0 * risk_per_share), 2)
 
@@ -76,19 +70,25 @@ class RiskEngine:
         Calculates exact share count using the 1% Capital Risk Rule.
         """
         account_balance = capital if capital is not None else self.default_capital
+        empty = {"quantity": 0, "total_exposure": 0.0, "max_rupee_risk": 0.0,
+                 "capital_risk_pct": 0.0}
+        if (not all(math.isfinite(v) for v in (current_price, stop_loss, account_balance, self.max_risk_per_trade_pct))
+                or min(current_price, stop_loss, account_balance) <= 0
+                or not 0 < self.max_risk_per_trade_pct <= 3):
+            return empty
         risk_amount = round(account_balance * (self.max_risk_per_trade_pct / 100.0), 2)
         
         risk_per_share = abs(current_price - stop_loss)
         if risk_per_share <= 0:
             return {"quantity": 0, "total_exposure": 0.0, "max_rupee_risk": 0.0}
 
-        quantity = int(risk_amount // risk_per_share)
+        quantity = min(int(risk_amount // risk_per_share), int(account_balance // current_price))
         total_exposure = round(quantity * current_price, 2)
 
         return {
             "quantity": quantity,
             "total_exposure": total_exposure,
-            "max_rupee_risk": risk_amount,
+            "max_rupee_risk": round(quantity * risk_per_share, 2),
             "capital_risk_pct": self.max_risk_per_trade_pct
         }
 
@@ -102,6 +102,17 @@ class RiskEngine:
         close = technical_snapshot.get("close", 0.0)
         sma_200 = technical_snapshot.get("SMA_200", 0.0)
         rsi = technical_snapshot.get("RSI_14", 50.0)
+
+        if action not in ("BUY", "SELL", "HOLD"):
+            return {"is_approved": False, "revised_action": "HOLD", "veto_reason": "Unknown action"}
+        if action == "HOLD":
+            return {"is_approved": False, "revised_action": "HOLD", "veto_reason": "No actionable setup"}
+        values = (close, sma_200, rsi, confidence)
+        if (not all(isinstance(v, (int, float)) and math.isfinite(v) for v in values)
+                or close <= 0 or sma_200 <= 0 or not 0 <= rsi <= 100 or not 0 <= confidence <= 100):
+            return {"is_approved": False, "revised_action": "HOLD", "veto_reason": "Missing or invalid technical/model inputs"}
+        if technical_snapshot.get("research_only", False):
+            return {"is_approved": False, "revised_action": "HOLD", "veto_reason": "Research data is not execution-grade"}
 
         # Guardrail 1: Minimum confidence threshold
         if confidence < 70 and action in ["BUY", "SELL"]:

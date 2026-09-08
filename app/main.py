@@ -17,6 +17,13 @@ import json
 import time
 from datetime import datetime
 
+st.set_page_config(page_title="NSE Research Terminal", page_icon="📈", layout="wide")
+workspace = st.sidebar.radio("Workspace", ["Research & historical paper replay", "Experimental AI dashboard"])
+if workspace == "Research & historical paper replay":
+    from app.components.research_workbench import render_research_workbench
+    render_research_workbench()
+    st.stop()
+
 from src.data_pipeline.broker_client import MarketDataFetcher
 from src.data_pipeline.database_manager import DatabaseManager
 from src.sentiment_engine.sentiment_analyzer import MultiHorizonSentimentAnalyzer
@@ -31,19 +38,11 @@ from src.rag_engine.retriever import StrategyRetriever
 from app.components.chart_view import render_candlestick
 from app.components.agent_cards import render_agent_debate
 
-st.set_page_config(
-    page_title="AI Stock Market Analyzer — NSE Institutional Terminal",
-    page_icon="📈",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
 DB_PATH = os.path.join(os.getcwd(), "data", "market_data.db")
 CONFIG_PATH = os.path.join(os.getcwd(), "config", "watchlist.json")
 MODEL_PATH = os.path.join(os.getcwd(), "data", "models", "best_model.pkl")
 
 # Initialize services
-@st.cache_resource
 def get_services():
     fetcher = MarketDataFetcher(cache_ttl_seconds=45)
     db_mgr = DatabaseManager()
@@ -52,10 +51,12 @@ def get_services():
     risk_engine = RiskEngine()
     pricing_engine = InstitutionalPricingEngine(num_simulations=1000, forecast_steps=5)
     intraday_engine = IntradaySignalEngine(supertrend_len=10, supertrend_mult=2.5)
-    rag_retriever = StrategyRetriever()
+    rag_retriever = None  # Optional service is initialized only when requested.
     return fetcher, db_mgr, sentiment_eng, dl_predictor, risk_engine, pricing_engine, intraday_engine, rag_retriever
 
-fetcher, db_mgr, sentiment_eng, dl_predictor, risk_engine, pricing_engine, intraday_engine, rag_retriever = get_services()
+if "experimental_services" not in st.session_state:
+    st.session_state.experimental_services = get_services()
+fetcher, db_mgr, sentiment_eng, dl_predictor, risk_engine, pricing_engine, intraday_engine, rag_retriever = st.session_state.experimental_services
 
 @st.cache_data
 def load_watchlist() -> list:
@@ -84,6 +85,8 @@ risk_engine.max_risk_per_trade_pct = user_risk_pct
 
 # --- Header Section ---
 st.title("📈 AI-Powered NSE Stock Market Analyzer")
+st.warning("Experimental research dashboard: Yahoo freshness is unverified, model scores are uncalibrated, "
+           "and markers/AI commentary are not executable orders. Use the research workspace for cost-aware replay.")
 st.caption("Institutional Intelligence Terminal | Live Supertrend & VWAP Buy/Sell Markers • Merton Jump-Diffusion • Bi-LSTM Sequences • Multi-Horizon Sentiment")
 
 tab1, tab2 = st.tabs(["📊 Watchlist Scanner & Live Heatmap", "🔍 Single-Stock Deep Dive"])
@@ -103,6 +106,8 @@ with tab1:
         st.write("")
         st.write("")
         btn_refresh = st.button("🔄 Refresh Live Quotes")
+        if btn_refresh:
+            fetcher.clear_cache()
 
     # Filter tickers
     filtered_tickers = [t for t in watchlist if search_filter in t] if search_filter else watchlist[:40]
@@ -128,14 +133,15 @@ with tab1:
 
         # Quick Signal classification
         if pct > 0.8 and s_1d >= 0.0:
-            quick_sig = "🟢 STRONG BUY"
+            quick_sig = "Positive momentum (research)"
         elif pct < -0.8 or s_1d < -0.2:
-            quick_sig = "🔴 SELL / SHORT"
+            quick_sig = "Negative momentum (research)"
         else:
             quick_sig = "🟡 HOLD"
 
         rows.append({
             "Ticker": t,
+            "Data quality": q.get("data_quality", "UNAVAILABLE"),
             "Price (₹)": price,
             "Change (%)": pct,
             "Day Low (₹)": low,
@@ -162,8 +168,8 @@ with tab1:
 
         # Summary KPIs
         kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-        top_gainer = df_table.iloc[0]
-        top_loser = df_table.iloc[-1]
+        top_gainer = df_table.loc[df_table["Change (%)"].idxmax()]
+        top_loser = df_table.loc[df_table["Change (%)"].idxmin()]
         advances = len(df_table[df_table["Change (%)"] > 0])
         declines = len(df_table[df_table["Change (%)"] < 0])
 
@@ -192,8 +198,7 @@ with tab2:
         live_quote = fetcher.fetch_live_quote_single(selected_ticker)
         
         df_daily = db_mgr.get_stock_data(selected_ticker)
-        if df_daily.empty and not df_candles.empty:
-            df_daily = df_candles
+        # Never substitute intraday observations for daily model inputs.
 
     # Run Intraday Signal Engine (Supertrend, VWAP, EMA Cross, Volume Surge Markers)
     df_enriched_candles, buy_markers, sell_markers = intraday_engine.generate_markers(df_candles)
@@ -207,7 +212,12 @@ with tab2:
     div_flag = sentiment_data.get("divergence_flag", "CONGRUENT")
 
     # Deep Learning Sequence Prediction
-    dl_bounds = dl_predictor.predict_trajectory(df_daily if not df_daily.empty else df_candles)
+    dl_bounds = dl_predictor.predict_trajectory(df_daily)
+    if not dl_bounds.get("available", False):
+        st.info("Deep-learning forecast unavailable: trained weights and sufficient daily data required.")
+        dl_bounds = {}
+    st.caption("Tabular ML is experimental: legacy artifacts lack a verified shared feature schema and calibration. "
+               "A neutral internal fallback is not a measured 50% probability.")
 
     # Tabular ML Directional Probability
     ml_prob = 50.0
@@ -253,7 +263,7 @@ with tab2:
 
     # Institutional Pricing Engine Envelope
     pricing_info = pricing_engine.calculate_fair_value_envelope(
-        df=df_daily if not df_daily.empty else df_candles,
+        df=df_daily,
         dl_forecast=dl_bounds,
         ml_prob=ml_prob
     )
@@ -295,20 +305,27 @@ with tab2:
     # Technical Guardrails Check
     tech_snapshot = {
         "close": current_price,
-        "SMA_200": float(df_daily['SMA_50'].iloc[-1]) if 'SMA_50' in df_daily.columns else current_price * 0.95,
-        "RSI_14": float(df_daily['RSI_14'].iloc[-1]) if 'RSI_14' in df_daily.columns else 50.0
+        "SMA_200": float(df_daily['SMA_200'].iloc[-1]) if not df_daily.empty and 'SMA_200' in df_daily.columns else float('nan'),
+        "RSI_14": float(df_daily['RSI_14'].iloc[-1]) if not df_daily.empty and 'RSI_14' in df_daily.columns else float('nan'),
+        "research_only": True
     }
     guardrail_res = risk_engine.verify_signal_guardrails(
         signal={"action": action_decision, "confidence_score": int(ml_prob)},
         technical_snapshot=tech_snapshot
     )
 
+    # A veto must remove actionable levels and quantity, not just show a badge.
+    if not guardrail_res["is_approved"]:
+        action_decision = "HOLD"
+        levels = risk_engine.calculate_levels(current_price, atr_val, "HOLD")
+        sizing = risk_engine.calculate_position_sizing(current_price, 0.0)
+
     # --- Top Metrics Bar ---
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Live Market Price", f"₹{current_price:.2f}", f"{live_quote.get('pct_change', 0.0):+.2f}%")
     m2.metric("Intraday Trend Bias", f"{live_intraday_status.get('supertrend_state', 'BULLISH')}", f"VWAP: ₹{live_intraday_status.get('vwap_level', current_price)}")
     m3.metric("Institutional Fair Value", f"₹{pricing_info.get('institutional_fair_value', current_price):.2f}", f"Edge: {mispricing_edge:+.2f}%")
-    m4.metric("Deep Learning Target", f"₹{dl_bounds.get('predicted_close', current_price):.2f}", f"Corridor: ₹{dl_bounds.get('predicted_low', 0):.0f} – ₹{dl_bounds.get('predicted_high', 0):.0f}")
+    m4.metric("Experimental daily model", f"₹{dl_bounds['predicted_close']:.2f}" if dl_bounds else "Unavailable")
     m5.metric("System Signal", f"{action_decision}", f"Guardrail: {'PASS' if guardrail_res['is_approved'] else 'VETO'}")
 
     # ==============================================================================
@@ -410,9 +427,9 @@ with tab2:
         st.markdown(f"* **Risk-to-Reward:** **1 : {levels['risk_reward_ratio']}**")
 
     with col_exec2:
-        st.markdown("### 🛡️ 1% Capital Risk Sizing")
+        st.markdown(f"### 🛡️ {user_risk_pct:g}% Capital Risk Sizing")
         st.markdown(f"* **Account Capital:** ₹{user_capital:,.2f}")
-        st.markdown(f"* **Max Rupee Risk (1%):** ₹{sizing['max_rupee_risk']:.2f}")
+        st.markdown(f"* **Modeled Price Risk (excludes costs):** ₹{sizing['max_rupee_risk']:.2f}")
         st.markdown(f"* **Recommended Shares:** **{sizing['quantity']} units**")
         st.markdown(f"* **Total Capital Exposure:** ₹{sizing['total_exposure']:,.2f}")
         if current_price > 0:
@@ -481,7 +498,12 @@ with tab2:
     if st.button("🚀 Trigger Multi-Agent Debate for " + selected_ticker):
         with st.spinner("Assembling agent panel and running debate workflow..."):
             tech_desc = f"LTP: ₹{current_price}, 1-Day Change: {live_quote.get('pct_change', 0.0)}%, ML Prob: {ml_prob:.1f}%, ATR: ₹{atr_val:.2f}"
-            rag_rules = rag_retriever.get_trading_rules(f"Trading setup and momentum rules for {selected_ticker}", k=2)
+            try:
+                rag_retriever = StrategyRetriever()
+                rag_rules = rag_retriever.get_trading_rules(f"Trading setup and momentum rules for {selected_ticker}", k=2)
+            except Exception:
+                st.warning("RAG unavailable. Check Ollama and the indexed book collection; commentary is not literature-validated.")
+                rag_rules = "No verified retrieved context available."
 
             state: AgentTradingState = {
                 "ticker": selected_ticker,

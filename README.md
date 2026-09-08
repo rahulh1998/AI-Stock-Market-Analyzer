@@ -1,5 +1,17 @@
 # 📈 AI-Powered NSE Stock Market Analyzer
 
+> **Current status (2026-09-08): research-first, not live-trading ready.** The default
+> workspace now provides cost-aware historical paper replay, source-data validation,
+> cash-limited sizing and a CSV trade ledger. No broker is connected. Yahoo data
+> is research-only and legacy AI predictions remain experimental. Earlier claims
+> below of institutional quality or leakage-free validation are design aspirations,
+> not verified results. See the [audit, setup, mathematical rules and phased roadmap](docs/REALISTIC_TRADING_ROADMAP.md).
+
+**New:** automatic completed-candle pattern analysis, conditional entry/stop/target
+scenarios, account-wide risk vetoes and chronological historical-neighbor diagnostics.
+See [pattern definitions, risk rules and limitations](docs/PATTERN_RISK_ANALYSIS.md).
+The existing baseline replay does **not** backtest this new pattern strategy.
+
 An institutional-grade quantitative trading, machine learning, and multi-agent intelligence platform designed specifically for equities traded on the **National Stock Exchange of India (NSE)**.
 
 The platform integrates **vectorized technical analysis**, **look-ahead-free machine learning**, **RAG-backed strategy validation** grounded in foundational financial literature, **news sentiment scoring**, **deterministic quantitative risk guardrails**, and a **LangGraph multi-agent debate assembly line**, all presented through an interactive **Streamlit** terminal.

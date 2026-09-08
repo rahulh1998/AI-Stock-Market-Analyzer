@@ -117,12 +117,14 @@ class IntradaySignalEngine:
 
         # 2. Session VWAP
         typical_price = (df['high'] + df['low'] + df['close']) / 3.0
-        vol = df['volume'] + 1e-5
-        window = min(len(df), 30)
-        df['vwap'] = (typical_price * vol).rolling(window=window, min_periods=1).sum() / vol.rolling(window=window, min_periods=1).sum()
+        timestamps = pd.to_datetime(df['timestamp'], errors='raise')
+        timestamps = timestamps.dt.tz_localize('Asia/Kolkata') if timestamps.dt.tz is None else timestamps.dt.tz_convert('Asia/Kolkata')
+        session = timestamps.dt.date
+        vol = df['volume']
+        df['vwap'] = (typical_price * vol).groupby(session).cumsum() / vol.groupby(session).cumsum().replace(0, np.nan)
 
         # 3. Volume SMA & Ratio
-        df['vol_sma20'] = df['volume'].rolling(window=20, min_periods=1).mean()
+        df['vol_sma20'] = df['volume'].shift(1).rolling(window=20, min_periods=20).mean()
         df['vol_surge'] = df['volume'] / (df['vol_sma20'] + 1e-5)
 
         # 4. RSI
