@@ -47,6 +47,8 @@ byte-identical — never repriced or resized.
 
 ---
 
+**New here? Start with [docs/HOW_TO_USE.md](docs/HOW_TO_USE.md).**
+
 ## Quick start
 
 Python 3.12. From the project root:
