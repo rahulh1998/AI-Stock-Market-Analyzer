@@ -241,7 +241,8 @@ def generate_signal(bars: pd.DataFrame, interval: str = "15m", *, ticker: str = 
                     account: AccountRisk = None, policy: SignalPolicy = None,
                     costs: EquityCosts = None, sentiment: dict = None, now=None,
                     config: SignalConfig = None, enable_short: bool = True,
-                    confidence_lookup=None, include_model: bool = True) -> TradeSignal:
+                    confidence_lookup=None, include_model: bool = True,
+                    retriever=None, decision_engine=None, company: str = "") -> TradeSignal:
     """Produce one TradeSignal for one instrument on one interval.
 
     Order of operations IS the invariant: the rule engine decides direction first, then
@@ -299,7 +300,22 @@ def generate_signal(bars: pd.DataFrame, interval: str = "15m", *, ticker: str = 
     # 3. Penalties: non-negative, so they can only reduce.
     algo_pi, algo_detail = algo_penalty(source.get("model"), direction, config)
     sent_pi, sent_detail = sentiment_penalty(sentiment, direction, config)
-    conviction = grade.score * (1.0 - algo_pi) * (1.0 - sent_pi)
+
+    # 3b. Multi-agent evidence. The crew contributes exactly one new scoring input -
+    # the event-risk veto - because news and the model are already priced above and
+    # counting them twice would be double jeopardy. Everything else the crew produces is
+    # explanation, attached for the UI and never scored.
+    crew_verdict, event_pi = None, 0.0
+    if retriever is not None or decision_engine is not None:
+        from src.agents.evidence_crew import arbiter, gather_evidence
+
+        evidence = gather_evidence(
+            report=source, direction=direction, sentiment=sentiment, retriever=retriever,
+            decision_engine=decision_engine, company=company or ticker)
+        crew_verdict = arbiter(evidence, direction, scored_agents={"event_risk"})
+        event_pi = crew_verdict.penalties.get("event_risk", 0.0)
+
+    conviction = grade.score * (1.0 - algo_pi) * (1.0 - sent_pi) * (1.0 - event_pi)
 
     # 4. Risk is scored independently of every model output.
     divergence = bool(sentiment and "DIVERGENCE" in str(sentiment.get("divergence_flag", "")))
@@ -308,7 +324,7 @@ def generate_signal(bars: pd.DataFrame, interval: str = "15m", *, ticker: str = 
                       as_of=source.get("as_of_bar_close"), divergence=divergence)
 
     rejections = list(source.get("rejections", []))
-    vetoes = list(risk.vetoes)
+    vetoes = list(risk.vetoes) + list(crew_verdict.vetoes if crew_verdict else [])
     final_action, final_plan, status = action, plan, source["status"]
 
     # 5. Conviction floor.
@@ -331,7 +347,11 @@ def generate_signal(bars: pd.DataFrame, interval: str = "15m", *, ticker: str = 
     return TradeSignal(
         ticker=ticker, interval=interval, horizon=horizon, action=final_action,
         direction=direction, conviction=conviction, setup=grade.to_dict(),
-        risk=risk.to_dict(), components={"algo": algo_detail, "sentiment": sent_detail},
+        risk=risk.to_dict(),
+        components={"algo": algo_detail, "sentiment": sent_detail,
+                    "event_risk": {"component": "event_risk", "available": event_pi > 0,
+                                   "penalty": round(event_pi, 4)},
+                    "crew": crew_verdict.to_dict() if crew_verdict else None},
         plan=final_plan, confidence=confidence, status=status,
         as_of_bar_close=source.get("as_of_bar_close"), valid_until=source.get("valid_until"),
         rejections=rejections, vetoes=vetoes, levels=source.get("levels", {}),

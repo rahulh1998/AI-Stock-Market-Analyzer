@@ -21,11 +21,22 @@ class EquityCosts:
     gst_rate: float = 0.18
     delivery_dp: float = 15.34
     slippage_bps: float = 5.0
+    # Securities-transaction and stamp rates. Defaulted to the NSE schedule so existing
+    # behaviour is unchanged, but parameterised because they are jurisdiction-specific:
+    # a US trade pays an SEC/FINRA pass-through on sells and no stamp duty at all, and
+    # applying Indian STT to it would overstate costs by about an order of magnitude.
+    stt_intraday_sell: float = 0.00025
+    stt_delivery: float = 0.001
+    # NSE delivery STT is charged on both legs; the US SEC/FINRA pass-through is sell-only.
+    stt_delivery_sell_only: bool = False
+    stamp_intraday_buy: float = 0.00003
+    stamp_delivery_buy: float = 0.00015
 
     def __post_init__(self):
         for name in self.__dataclass_fields__:
             value = getattr(self, name)
-            if name != "intraday" and (not math.isfinite(value) or value < 0):
+            if name not in ("intraday", "stt_delivery_sell_only") and (
+                    not math.isfinite(value) or value < 0):
                 raise ValueError(f"Invalid cost parameter: {name}")
         if self.slippage_bps >= 10000:
             raise ValueError("Slippage must be less than 10000 bps")
@@ -39,8 +50,12 @@ class EquityCosts:
         brokerage = min(turnover * self.brokerage_rate, self.brokerage_cap) if self.intraday else 0.0
         exchange = turnover * self.exchange_rate
         sebi = turnover * self.sebi_rate
-        stt = turnover * (0.00025 if side == "SELL" else 0.0) if self.intraday else turnover * 0.001
-        stamp = turnover * (0.00003 if self.intraday else 0.00015) if side == "BUY" else 0.0
+        stt = (turnover * (self.stt_intraday_sell if side == "SELL" else 0.0)
+               if self.intraday else
+               turnover * (self.stt_delivery
+                           if side == "SELL" or not self.stt_delivery_sell_only else 0.0))
+        stamp = (turnover * (self.stamp_intraday_buy if self.intraday else self.stamp_delivery_buy)
+                 if side == "BUY" else 0.0)
         gst = (brokerage + exchange + sebi) * self.gst_rate
         dp = self.delivery_dp if not self.intraday and side == "SELL" and quantity else 0.0
         result = dict(brokerage=brokerage, exchange=exchange, sebi=sebi, stt=stt, stamp=stamp, gst=gst, dp=dp)

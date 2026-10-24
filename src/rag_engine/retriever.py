@@ -20,6 +20,51 @@ class StrategyRetriever:
             embedding_function=self.embeddings
         )
         
+    def retrieve(self, query: str, k: int = 3) -> list:
+        """Structured passages with their source book, cached on disk.
+
+        Embedding a query through Ollama takes about 20 seconds on this hardware, which is
+        far too slow to repeat per rerun, and the book corpus never changes - so a hit is
+        permanent rather than time-limited.
+        """
+        import hashlib, json, sqlite3
+        from src.paths import DB_PATH
+
+        key = hashlib.sha1(f'{query}|{k}'.encode('utf-8')).hexdigest()
+        conn = None
+        try:
+            conn = sqlite3.connect(str(DB_PATH), timeout=30.0)
+            conn.execute('CREATE TABLE IF NOT EXISTS rag_cache ('
+                         'cache_key TEXT PRIMARY KEY, query TEXT, passages_json TEXT)')
+            row = conn.execute('SELECT passages_json FROM rag_cache WHERE cache_key = ?',
+                               (key,)).fetchone()
+            if row:
+                return json.loads(row[0])
+        except Exception as exc:
+            logger.warning('RAG cache read failed: %s', exc)
+
+        try:
+            documents = self.vector_store.similarity_search(query, k=k)
+        except Exception as exc:
+            logger.warning('RAG retrieval failed: %s', exc)
+            if conn is not None:
+                conn.close()
+            return []
+        passages = [{'text': d.page_content,
+                     'source': os.path.basename(str(d.metadata.get('source', 'unknown')))}
+                    for d in documents]
+        try:
+            if conn is not None:
+                conn.execute('INSERT OR REPLACE INTO rag_cache VALUES (?, ?, ?)',
+                             (key, query, json.dumps(passages)))
+                conn.commit()
+        except Exception as exc:
+            logger.warning('RAG cache write failed: %s', exc)
+        finally:
+            if conn is not None:
+                conn.close()
+        return passages
+
     def get_trading_rules(self, query: str, k: int = 3) -> str:
         """
         Searches the local ChromaDB for rules matching the query.
