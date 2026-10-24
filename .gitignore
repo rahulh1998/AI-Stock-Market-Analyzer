@@ -10,6 +10,7 @@ __pycache__/
 *.pyc
 validation-*.log
 data/backtest_report.json
+data/e2e_report.json
 
 # Databases and Local Data
 *.db
