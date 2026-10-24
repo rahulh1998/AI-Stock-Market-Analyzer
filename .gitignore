@@ -9,6 +9,7 @@ env/
 __pycache__/
 *.pyc
 validation-*.log
+data/backtest_report.json
 
 # Databases and Local Data
 *.db

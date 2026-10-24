@@ -303,7 +303,7 @@ def generate_signal(bars: pd.DataFrame, interval: str = "15m", *, ticker: str = 
 
     # 4. Risk is scored independently of every model output.
     divergence = bool(sentiment and "DIVERGENCE" in str(sentiment.get("divergence_flag", "")))
-    risk = risk_score(features, row, plan, direction, intraday,
+    risk = risk_score(row, plan, direction, intraday, df=features,
                       recent_patterns=source.get("recent_patterns", []),
                       as_of=source.get("as_of_bar_close"), divergence=divergence)
 

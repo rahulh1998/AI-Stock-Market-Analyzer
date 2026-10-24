@@ -138,13 +138,18 @@ class RiskScore:
                         "Derived only from price, volume and cost inputs - never from a model."}
 
 
-def _gap_count(df: pd.DataFrame) -> float:
-    """Overnight/!bar-open gaps above 1% in the trailing 20 bars."""
-    if len(df) < 2:
-        return 0.0
-    previous = df.close.shift(1)
-    gaps = (df.open / previous - 1.0).abs().tail(20)
-    return float((gaps > 0.01).sum())
+def risk_context(df: pd.DataFrame) -> pd.DataFrame:
+    """Rolling inputs risk_score needs, one row per bar.
+
+    Causal by construction: every window ends at its own row. Precomputing these once lets
+    a backtest score 100k bars without re-slicing the frame, while live scoring takes the
+    last row - both paths then run the identical arithmetic below.
+    """
+    out = pd.DataFrame(index=df.index)
+    out["turnover_20"] = (df.close * df.volume).rolling(20, min_periods=1).median()
+    gaps = (df.open / df.close.shift(1) - 1.0).abs()
+    out["gap_count_20"] = (gaps > 0.01).rolling(20, min_periods=1).sum().fillna(0.0)
+    return out
 
 
 def _recent_opposing(recent_patterns: list, direction: str, as_of: str) -> bool:
@@ -161,10 +166,19 @@ def _recent_opposing(recent_patterns: list, direction: str, as_of: str) -> bool:
     return False
 
 
-def risk_score(df: pd.DataFrame, row: pd.Series, plan: dict, direction: str, intraday: bool,
+def risk_score(row: pd.Series, plan: dict, direction: str, intraday: bool,
+               context: pd.Series = None, df: pd.DataFrame = None,
                recent_patterns: list = None, as_of: str = None,
                divergence: bool = False) -> RiskScore:
-    """0 (benign) to 100 (severe), plus the per-term table and any hard vetoes."""
+    """0 (benign) to 100 (severe), plus the per-term table and any hard vetoes.
+
+    Supply either `context`, a row of risk_context (the fast path used by the backtest),
+    or `df`, the frame, from which the last context row is derived (the live path).
+    """
+    if context is None:
+        if df is None or len(df) == 0:
+            raise ValueError("risk_score needs either a context row or a frame")
+        context = risk_context(df).iloc[-1]
     horizon = "intraday" if intraday else "daily"
     terms, vetoes = {}, []
 
@@ -175,7 +189,7 @@ def risk_score(df: pd.DataFrame, row: pd.Series, plan: dict, direction: str, int
     distance = abs(entry - stop) / entry if entry and math.isfinite(entry) and entry > 0 else np.nan
     terms["stop_distance"] = ramp(distance, *RISK_BREAKPOINTS["stop_distance"][horizon])
 
-    turnover = float((df.close * df.volume).tail(20).median()) if len(df) else np.nan
+    turnover = float(context["turnover_20"]) if pd.notna(context["turnover_20"]) else np.nan
     terms["liquidity"] = ramp(turnover, *RISK_BREAKPOINTS["liquidity"][horizon])
 
     participation = (quantity * entry / turnover
@@ -195,7 +209,7 @@ def risk_score(df: pd.DataFrame, row: pd.Series, plan: dict, direction: str, int
                      if pd.notna(sma) and float(sma) > 0 else np.nan)
     terms["extension"] = ramp(extension, *RISK_BREAKPOINTS["extension"][horizon])
 
-    terms["gap_history"] = ramp(_gap_count(df), *RISK_BREAKPOINTS["gap_history"][horizon])
+    terms["gap_history"] = ramp(float(context["gap_count_20"]), *RISK_BREAKPOINTS["gap_history"][horizon])
     terms["opposing_pattern"] = (OPPOSING_PATTERN_RISK
                                  if _recent_opposing(recent_patterns or [], direction, as_of)
                                  else 0.0)
