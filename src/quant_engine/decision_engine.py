@@ -11,7 +11,8 @@ import math
 import numpy as np
 import pandas as pd
 
-from src.quant_engine.research import EquityCosts, research_features, size_long, validate_bars
+from src.quant_engine.research import (EquityCosts, research_features, size_long,
+                                       size_short, validate_bars)
 
 
 PATTERNS = {
@@ -77,6 +78,8 @@ def pattern_features(frame: pd.DataFrame, intraday: bool = True) -> pd.DataFrame
     df["support_20"] = l.shift().rolling(20).min()
     df["resistance_20"] = h.shift().rolling(20).max()
     df["resistance_60"] = h.shift().rolling(60).max()
+    # Shifted like its neighbours: the current bar must not cap its own target.
+    df["support_60"] = l.shift().rolling(60).min()
     df["trend_atr"] = (df.ema_fast - df.ema_slow) / df.wilder_atr.replace(0, np.nan)
     df["return_3"] = c.pct_change(3)
     df["atr_fraction"] = df.wilder_atr / c
@@ -237,9 +240,169 @@ def build_long_plan(row: pd.Series, account: AccountRisk, policy: SignalPolicy, 
                     "Recompute on the next completed bar. No fill or maximum-loss guarantee."}, []
 
 
+def build_short_plan(row: pd.Series, account: AccountRisk, policy: SignalPolicy,
+                     costs: EquityCosts) -> tuple:
+    """Worst entry-zone fill sizing for an intraday short.
+
+    Two deliberate asymmetries versus build_long_plan, not oversights:
+    shorting is rejected outright on a delivery product, and the stop-distance cap is
+    tighter (3% vs 4%) because a short's loss tail is unbounded.
+    """
+    if not costs.intraday:
+        return None, ["Short entries are intraday-only; NSE cash delivery cannot be sold short"]
+    reasons = []
+    if account.kill_switch:
+        reasons.append("Manual kill switch is enabled")
+    if account.equity <= account.day_start_equity * (1 - policy.daily_loss_pct / 100):
+        reasons.append("Daily equity-loss limit reached (includes unrealized P&L)")
+    if account.equity <= account.peak_equity * (1 - policy.max_drawdown_pct / 100):
+        reasons.append("Portfolio drawdown limit reached")
+    if account.consecutive_losses >= policy.loss_streak_limit:
+        reasons.append("Consecutive-loss cooldown requires manual review")
+    remaining_risk = account.equity * policy.max_open_risk_pct / 100 - account.open_risk
+    remaining_exposure = account.equity * policy.max_gross_exposure_pct / 100 - account.gross_exposure
+    budget = min(account.equity * policy.risk_pct / 100, remaining_risk)
+    allocation = min(account.cash, account.equity * policy.allocation_pct / 100, remaining_exposure)
+    if budget <= 0 or allocation <= 0:
+        reasons.append("Portfolio open-risk or gross-exposure capacity exhausted")
+    needed = [row.get(key, np.nan) for key in ("high", "low", "close", "wilder_atr")]
+    if not all(np.isfinite(v) and v > 0 for v in needed):
+        reasons.append("Invalid price/ATR inputs")
+    if reasons:
+        return None, reasons
+    atr = float(row.wilder_atr)
+    trigger = tick_round(float(row.low) - policy.tick_size, policy.tick_size)
+    entry_floor = tick_round(trigger - 0.25 * atr, policy.tick_size)
+    stop = tick_round(max(float(row.high) + 0.1 * atr, trigger + 1.5 * atr), policy.tick_size, True)
+    slip = costs.slippage_bps / 10000
+    # Selling into the move fills lower than the quoted floor.
+    entry_fill = entry_floor * (1 - slip)
+    risk_distance = stop - entry_fill
+    if entry_fill <= 0 or risk_distance / entry_fill > 0.03:
+        return None, ["Stop distance is invalid or exceeds the short volatility limit"]
+    target = entry_fill - 3 * risk_distance
+    for key in ("support_20", "support_60", "last_swing_low"):
+        level = row.get(key, np.nan)
+        if np.isfinite(level) and level < trigger:
+            target = max(target, float(level) + policy.tick_size)
+    target = tick_round(target, policy.tick_size, True)
+    if target <= 0:
+        return None, ["Invalid support-limited target"]
+    effective_risk = min(3.0, budget / account.cash * 100)
+    quantity = size_short(entry_fill, stop, account.cash, effective_risk, costs,
+                          allocation / account.cash * 100)
+    if quantity == 0:
+        return None, ["No whole share fits cash, fees and risk limits"]
+    entry_fee = costs.fee(entry_fill, quantity, "SELL")
+    # Both exits are buys, so adverse slippage pays UP on each.
+    stop_fill, target_fill = stop * (1 + slip), target * (1 + slip)
+    loss = quantity * (stop_fill - entry_fill) + entry_fee + costs.fee(stop_fill, quantity, "BUY")
+    reward = quantity * (entry_fill - target_fill) - entry_fee - costs.fee(target_fill, quantity, "BUY")
+    if reward <= 0 or reward / loss < policy.min_net_rr:
+        return None, ["Nearest support/costs leave insufficient net reward-to-risk"]
+    return {"sell_trigger": trigger, "entry_floor": entry_floor, "stop": stop, "take_profit": target,
+            "quantity": quantity, "worst_modeled_entry_fill": entry_fill,
+            "margin_required": quantity * entry_fill + entry_fee,
+            "modeled_stop_loss": loss, "modeled_target_profit": reward, "net_reward_risk": reward / loss,
+            "product": "INTRADAY",
+            "rule": "Only consider a subsequent breakdown below trigger; cancel below entry floor or "
+                    "above stop. Intraday only: square off before session close. Recompute on the "
+                    "next completed bar. No fill or maximum-loss guarantee."}, []
+
+
+def summarize_patterns(df: pd.DataFrame, last: pd.Series, duration: pd.Timedelta) -> tuple:
+    """Active patterns on the latest completed bar, plus the trailing 20-bar timeline.
+
+    Each entry is stamped with the bar close at which it became knowable, never the bar
+    open, so a caller cannot mistake it for information available earlier.
+    """
+    active = [{"name": name, "direction": direction, "rule": rule}
+              for name, (direction, rule) in PATTERNS.items() if bool(last[name])]
+    recent = []
+    for _, row in df.tail(20).iterrows():
+        for name, (direction, _) in PATTERNS.items():
+            if row[name]:
+                recent.append({"known_at": (row.timestamp + duration).isoformat(),
+                               "pattern": name, "direction": direction})
+    return active, recent
+
+
+def classify_bias(last: pd.Series) -> tuple:
+    """(bull, bear, label). Both directions firing is CONFLICTING, never a net direction."""
+    bull = any(bool(last[name]) for name in BULLISH)
+    bear = any(bool(last[name]) for name in BEARISH)
+    label = "CONFLICTING" if bull and bear else "BULLISH" if bull else "BEARISH" if bear else "NEUTRAL"
+    return bull, bear, label
+
+
+def evaluate_data_quality(df: pd.DataFrame, last: pd.Series, clock: pd.Timestamp,
+                          duration: pd.Timedelta, expiry: pd.Timestamp, intraday: bool) -> tuple:
+    """(reasons, stale). Feed problems only; says nothing about direction.
+
+    Returned in a fixed order because callers surface the first reason to the user.
+    """
+    reasons = []
+    minimum = 60 if intraday else 200
+    if len(df) < minimum:
+        reasons.append(f"Need at least {minimum} completed bars for this horizon")
+    stale = clock >= expiry
+    if intraday and last.timestamp.date() != clock.date():
+        stale = True
+    if stale:
+        reasons.append("Latest data is stale; historical observations only")
+    if intraday:
+        recent = df[df.timestamp.dt.date == last.timestamp.date()]
+        differences = recent.timestamp.diff().dropna()
+        if (differences != duration).any():
+            reasons.append("Missing or irregular candles in the current observed session")
+    elif (df.timestamp.dt.date.duplicated()).any():
+        reasons.append("Daily analysis requires at most one candle per date")
+    if last.volume <= 0 or (df.volume.tail(5) <= 0).any():
+        reasons.append("Zero-volume recent candles; tradability unverified")
+    if df.close.pct_change().tail(20).abs().gt(0.2).any():
+        reasons.append("Large price discontinuity: check corporate actions or bad data")
+    return reasons, stale
+
+
+def evaluate_long_gates(last: pd.Series, intraday: bool, bull: bool) -> list:
+    """Hard long-entry gates. Deliberately boolean: these conditions are near-collinear,
+    so weighting them would count one piece of evidence several times.
+    """
+    reasons = []
+    if not bull:
+        reasons.append("No confirmed bullish setup on the latest completed bar")
+    if not (last.ema_fast > last.ema_slow and last.adx >= 20):
+        reasons.append("Trend/ADX confirmation absent")
+    if not (40 <= last.rsi <= 75):
+        reasons.append("RSI outside long-entry risk band [40, 75]")
+    if not last.relative_volume >= 1.25:
+        reasons.append("Volume confirmation below 1.25x preceding 20-bar mean")
+    if intraday and not last.close > last.vwap:
+        reasons.append("Price is not above session VWAP")
+    if not intraday and not last.close > last.sma_200:
+        reasons.append("Price is not above a warmed-up SMA200")
+    return reasons
+
+
+def evaluate_short_gates(last: pd.Series, intraday: bool, bear: bool) -> list:
+    """Mirror of evaluate_long_gates. Intraday only; enforced by build_short_plan."""
+    reasons = []
+    if not bear:
+        reasons.append("No confirmed bearish setup on the latest completed bar")
+    if not (last.ema_fast < last.ema_slow and last.adx >= 20):
+        reasons.append("Downtrend/ADX confirmation absent")
+    if not (25 <= last.rsi <= 60):
+        reasons.append("RSI outside short-entry risk band [25, 60]")
+    if not last.relative_volume >= 1.25:
+        reasons.append("Volume confirmation below 1.25x preceding 20-bar mean")
+    if intraday and not last.close < last.vwap:
+        reasons.append("Price is not below session VWAP")
+    return reasons
+
+
 def analyze_market(frame: pd.DataFrame, interval: str = "5m", now=None,
                    account: AccountRisk = None, policy: SignalPolicy = None,
-                   costs: EquityCosts = None) -> dict:
+                   costs: EquityCosts = None, include_model: bool = True) -> dict:
     """Analyze completed observations automatically; never grant live eligibility."""
     durations = {"5m": "5min", "15m": "15min", "1h": "1h", "1d": "1d"}
     if interval not in durations:
@@ -276,56 +439,22 @@ def analyze_market(frame: pd.DataFrame, interval: str = "5m", now=None,
     last = df.iloc[-1].copy()
     swings = df.confirmed_swing_high.dropna()
     last["last_swing_high"] = float(swings.iloc[-1]) if len(swings) else np.nan
+    swing_lows = df.confirmed_swing_low.dropna()
+    last["last_swing_low"] = float(swing_lows.iloc[-1]) if len(swing_lows) else np.nan
     report["as_of_bar_close"] = (last.timestamp + duration).isoformat()
     expiry = last.timestamp + (2 * duration if intraday else duration + pd.Timedelta(days=7))
     report["valid_until"] = expiry.isoformat()
-    report["patterns"] = [{"name": name, "direction": direction, "rule": rule}
-                          for name, (direction, rule) in PATTERNS.items() if bool(last[name])]
-    for _, row in df.tail(20).iterrows():
-        for name, (direction, _) in PATTERNS.items():
-            if row[name]:
-                report["recent_patterns"].append({"known_at": (row.timestamp + duration).isoformat(),
-                                                  "pattern": name, "direction": direction})
+    report["patterns"], report["recent_patterns"] = summarize_patterns(df, last, duration)
     report["levels"] = {name: float(last[name]) if pd.notna(last[name]) else None for name in
                         ("close", "vwap", "support_20", "resistance_20", "wilder_atr", "rsi", "adx", "relative_volume")}
     reasons = report["rejections"]
-    minimum = 60 if intraday else 200
-    if len(df) < minimum:
-        reasons.append(f"Need at least {minimum} completed bars for this horizon")
-    stale = clock >= expiry
-    if intraday and last.timestamp.date() != clock.date():
-        stale = True
-    if stale:
-        reasons.append("Latest data is stale; historical observations only")
-    if intraday:
-        recent = df[df.timestamp.dt.date == last.timestamp.date()]
-        differences = recent.timestamp.diff().dropna()
-        if (differences != duration).any():
-            reasons.append("Missing or irregular candles in the current observed session")
-    elif (df.timestamp.dt.date.duplicated()).any():
-        reasons.append("Daily analysis requires at most one candle per date")
-    if last.volume <= 0 or (df.volume.tail(5) <= 0).any():
-        reasons.append("Zero-volume recent candles; tradability unverified")
-    if df.close.pct_change().tail(20).abs().gt(0.2).any():
-        reasons.append("Large price discontinuity: check corporate actions or bad data")
-    bull = any(bool(last[name]) for name in BULLISH)
-    bear = any(bool(last[name]) for name in BEARISH)
-    report["bias"] = "CONFLICTING" if bull and bear else "BULLISH" if bull else "BEARISH" if bear else "NEUTRAL"
+    quality_reasons, stale = evaluate_data_quality(df, last, clock, duration, expiry, intraday)
+    reasons.extend(quality_reasons)
+    bull, bear, report["bias"] = classify_bias(last)
     data_blocked = bool(reasons)
     if bull and bear:
         reasons.append("Conflicting directional patterns")
-    if not bull:
-        reasons.append("No confirmed bullish setup on the latest completed bar")
-    if not (last.ema_fast > last.ema_slow and last.adx >= 20):
-        reasons.append("Trend/ADX confirmation absent")
-    if not (40 <= last.rsi <= 75):
-        reasons.append("RSI outside long-entry risk band [40, 75]")
-    if not last.relative_volume >= 1.25:
-        reasons.append("Volume confirmation below 1.25x preceding 20-bar mean")
-    if intraday and not last.close > last.vwap:
-        reasons.append("Price is not above session VWAP")
-    if not intraday and not last.close > last.sma_200:
-        reasons.append("Price is not above a warmed-up SMA200")
+    reasons.extend(evaluate_long_gates(last, intraday, bull))
     plan, risk_reasons = build_long_plan(last, account, policy, costs)
     reasons.extend(risk_reasons)
     if not reasons:
@@ -338,6 +467,92 @@ def analyze_market(frame: pd.DataFrame, interval: str = "5m", now=None,
                                "This is not an instruction to open a short." if bear else
                                "Keep the original protective stop; no automatic stop widening or averaging down.")
     # Separate empirical research evidence; it never changes action, prices or risk.
-    from src.ml_engine.historical_neighbors import historical_outlook
-    report["model"] = historical_outlook(df, horizon=3 if intraday else 5, intraday=intraday)
+    # include_model=False skips it for fast watchlist scanning; the report then says so
+    # rather than implying the model was consulted and had nothing to say.
+    if include_model:
+        from src.ml_engine.historical_neighbors import historical_outlook
+        report["model"] = historical_outlook(df, horizon=3 if intraday else 5, intraday=intraday)
+    else:
+        report["model"] = {"available": False, "reason": "Not computed in fast scan mode",
+                           "skipped": True}
+    return report
+
+
+def analyze_market_short(frame: pd.DataFrame, interval: str = "5m", now=None,
+                         account: AccountRisk = None, policy: SignalPolicy = None,
+                         costs: EquityCosts = None, include_model: bool = True) -> dict:
+    """Intraday-only short counterpart of analyze_market.
+
+    Kept separate rather than folded into analyze_market, whose long-only contract is
+    asserted by the existing suite. Statuses are distinct so a caller can never confuse a
+    short entry with a long one.
+    """
+    durations = {"5m": "5min", "15m": "15min", "1h": "1h"}
+    if interval not in durations:
+        raise ValueError("Short analysis supports intraday intervals only (5m, 15m, 1h)")
+    account, policy = account or AccountRisk(), policy or SignalPolicy()
+    costs = costs or EquityCosts(intraday=True)
+    if not costs.intraday:
+        raise ValueError("Short analysis requires an intraday fee product")
+    clock = pd.Timestamp.now(tz="Asia/Kolkata") if now is None else pd.Timestamp(now)
+    if clock.tzinfo is None:
+        raise ValueError("Analysis clock must be timezone aware")
+    clock = clock.tz_convert("Asia/Kolkata")
+    duration = pd.Timedelta(durations[interval])
+    report = {"version": "pattern-risk-short-v1", "status": "WAIT", "execution_eligible": False,
+              "direction": "SHORT", "patterns": [], "recent_patterns": [], "rejections": [],
+              "plan": None, "model": {"available": False, "reason": "Insufficient completed history"},
+              "warnings": ["Research feed; exchange calendar, spread, circuits and corporate actions are unverified.",
+                           "Short selling is intraday-only in NSE cash and must be squared off before close.",
+                           "Pattern agreement is not a calibrated probability. No model knows the day's best prices."]}
+    try:
+        raw = validate_bars(frame)
+    except (ValueError, TypeError, KeyError) as exc:
+        report.update(status="INVALID_DATA", rejections=[str(exc)])
+        return report
+    if (raw.timestamp > clock).any():
+        report.update(status="INVALID_DATA", rejections=["Future timestamps detected"])
+        return report
+    bars = raw[raw.timestamp + duration <= clock].reset_index(drop=True)
+    report["excluded_incomplete_bars"] = len(raw) - len(bars)
+    if bars.empty:
+        report["rejections"] = ["No completed candles"]
+        return report
+    df = pattern_features(bars, True)
+    last = df.iloc[-1].copy()
+    swing_lows = df.confirmed_swing_low.dropna()
+    last["last_swing_low"] = float(swing_lows.iloc[-1]) if len(swing_lows) else np.nan
+    report["as_of_bar_close"] = (last.timestamp + duration).isoformat()
+    expiry = last.timestamp + 2 * duration
+    report["valid_until"] = expiry.isoformat()
+    report["patterns"], report["recent_patterns"] = summarize_patterns(df, last, duration)
+    report["levels"] = {name: float(last[name]) if pd.notna(last[name]) else None for name in
+                        ("close", "vwap", "support_20", "support_60", "resistance_20",
+                         "wilder_atr", "rsi", "adx", "relative_volume")}
+    reasons = report["rejections"]
+    quality_reasons, stale = evaluate_data_quality(df, last, clock, duration, expiry, True)
+    reasons.extend(quality_reasons)
+    bull, bear, report["bias"] = classify_bias(last)
+    data_blocked = bool(reasons)
+    if bull and bear:
+        reasons.append("Conflicting directional patterns")
+    reasons.extend(evaluate_short_gates(last, True, bear))
+    plan, risk_reasons = build_short_plan(last, account, policy, costs)
+    reasons.extend(risk_reasons)
+    if not reasons:
+        report.update(status="SHORT_ENTRY", plan=plan)
+    elif stale:
+        report["status"] = "HISTORICAL_ONLY"
+    elif bull and not bear and not data_blocked:
+        report["status"] = "EXIT_REVIEW_SHORT"
+    report["exit_guidance"] = ("Bullish pattern against a short: review any open short and its "
+                               "original stop. This is not an instruction to open a long."
+                               if bull else
+                               "Keep the original protective stop; no averaging up into a losing short.")
+    if include_model:
+        from src.ml_engine.historical_neighbors import historical_outlook
+        report["model"] = historical_outlook(df, horizon=3, intraday=True)
+    else:
+        report["model"] = {"available": False, "reason": "Not computed in fast scan mode",
+                           "skipped": True}
     return report

@@ -18,7 +18,9 @@ from src.data_pipeline.database_manager import DatabaseManager
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-CONFIG_PATH = os.path.join(os.getcwd(), "config", "watchlist.json")
+from src.paths import WATCHLIST_PATH
+
+CONFIG_PATH = str(WATCHLIST_PATH)
 
 class MultiHorizonSentimentAnalyzer:
     """

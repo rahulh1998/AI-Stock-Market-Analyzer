@@ -1,4 +1,7 @@
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+import os
 import glob
 import logging
 import warnings
@@ -12,8 +15,10 @@ from langchain_chroma import Chroma
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-BOOKS_DIR = os.path.join(os.getcwd(), "data", "books")
-CHROMA_PATH = os.path.join(os.getcwd(), "data", "chromadb")
+from src.paths import BOOKS_DIR as _BOOKS_DIR, CHROMA_DIR
+
+BOOKS_DIR = str(_BOOKS_DIR)
+CHROMA_PATH = str(CHROMA_DIR)
 
 def build_vector_store():
     """Reads documents, creates local Ollama embeddings, and stores them in batches."""

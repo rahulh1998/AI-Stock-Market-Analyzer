@@ -1,386 +1,251 @@
-# 📈 AI-Powered NSE Stock Market Analyzer
+# NSE Stock Market Analyzer
 
-> **Current status (2026-09-08): research-first, not live-trading ready.** The default
-> workspace now provides cost-aware historical paper replay, source-data validation,
-> cash-limited sizing and a CSV trade ledger. No broker is connected. Yahoo data
-> is research-only and legacy AI predictions remain experimental. Earlier claims
-> below of institutional quality or leakage-free validation are design aspirations,
-> not verified results. See the [audit, setup, mathematical rules and phased roadmap](docs/REALISTIC_TRADING_ROADMAP.md).
+An end-to-end **trade-signal workbench** for Indian cash equities (NSE). It combines
+rule/pattern analysis, an algorithmic model and news sentiment into one recommendation —
+`BUY`, `SHORT_ENTRY`, `EXIT_LONG` or `HOLD` — with exact entry, stop, target and position
+size, a **conviction** score, a **risk** score, and a persistent **paper book** that scores
+those signals over time.
 
-**New:** automatic completed-candle pattern analysis, conditional entry/stop/target
-scenarios, account-wide risk vetoes and chronological historical-neighbor diagnostics.
-See [pattern definitions, risk rules and limitations](docs/PATTERN_RISK_ANALYSIS.md).
-The existing baseline replay does **not** backtest this new pattern strategy.
-
-An institutional-grade quantitative trading, machine learning, and multi-agent intelligence platform designed specifically for equities traded on the **National Stock Exchange of India (NSE)**.
-
-The platform integrates **vectorized technical analysis**, **look-ahead-free machine learning**, **RAG-backed strategy validation** grounded in foundational financial literature, **news sentiment scoring**, **deterministic quantitative risk guardrails**, and a **LangGraph multi-agent debate assembly line**, all presented through an interactive **Streamlit** terminal.
+> **Status: research tool. No broker is connected and no real orders can be placed.**
+> Market data comes from Yahoo Finance and carries no live-feed guarantee. Nothing here is
+> investment advice. The paper book is a local SQLite simulation, not a broker sandbox.
 
 ---
 
-## 📑 Table of Contents
-1. [Executive Summary](#-executive-summary)
-2. [High-Level Architecture](#-high-level-architecture)
-3. [System Modules & Components](#-system-modules--components)
-   - [1. Data Pipeline & Persistence (`src/data_pipeline/`)](#1-data-pipeline--persistence-srcdata_pipeline)
-   - [2. Machine Learning Engine (`src/ml_engine/`)](#2-machine-learning-engine-srcml_engine)
-   - [3. Quant & Risk Management Engine (`src/quant_engine/`)](#3-quant--risk-management-engine-srcquant_engine)
-   - [4. RAG Strategy Knowledge Base (`src/rag_engine/`)](#4-rag-strategy-knowledge-base-srcrag_engine)
-   - [5. Sentiment Engine (`src/sentiment_engine/`)](#5-sentiment-engine-srcsentiment_engine)
-   - [6. LangGraph Multi-Agent Orchestrator (`src/agents/`)](#6-langgraph-multi-agent-orchestrator-srcagents)
-   - [7. Interactive Streamlit Dashboard (`app/`)](#7-interactive-streamlit-dashboard-app)
-4. [Data Flow & Execution Pipeline](#-data-flow--execution-pipeline)
-5. [Deterministic Risk Rules & Guardrails](#-deterministic-risk-rules--guardrails)
-6. [Supported Candlestick Patterns](#-supported-candlestick-patterns)
-7. [Repository Structure](#-repository-structure)
-8. [Installation & Setup](#-installation--setup)
-9. [Running the Application](#-running-the-application)
-10. [Configuration & Watchlist](#-configuration--watchlist)
+## What the numbers mean
 
----
+This is the most important section in this file. Three numbers are reported, and they mean
+three different things.
 
-## 🏛 Executive Summary
+| Number | Range | What it is | What it is **not** |
+|---|---|---|---|
+| **Conviction** | 0–100 | A *ranking statistic*: how strong the rule evidence is, after penalties. Use it to sort a watchlist and to scale size **down**. | Not a probability. Never read it as a percent chance, and it is never rendered with a `%`. |
+| **Risk score** | 0–100 | Severity, from volatility, stop width, liquidity, participation, extension, net reward:risk and gap history. 0 benign, 100 severe. | Not derived from any model output, so it stays independent of conviction. |
+| **Confidence** | a measured rate + 95% interval | The realised hit rate of *this paper book's own closed trades* in the same (direction, interval, grade) bucket, with a Wilson interval. | Absent until a bucket has 30 closed trades. Until then the UI says "n of 30 needed" rather than showing a made-up number. |
 
-Traditional retail trading systems rely either solely on lagging technical indicators or ungrounded machine learning black boxes. The **AI-Powered NSE Stock Market Analyzer** solves this with a **defense-in-depth trading framework**:
+### The core invariant
 
-- **No Future Data Leakage**: Features are 1-day lagged, and walk-forward cross-validation (`TimeSeriesSplit`) ensures models are benchmarked strictly out-of-sample.
-- **RAG-Grounded Heuristics**: Trades are cross-referenced with seminal trading literature (*Steve Nison*, *William O'Neil*, *John J. Murphy*, *Saurabh Mukherjea*, and *Zerodha Varsity*).
-- **Adversarial Multi-Agent Debate**: A LangGraph assembly line pits a Bullish Technical Analyst against a dedicated **Bear Advocate** before the **Lead Portfolio Manager** makes an execution decision.
-- **Hard Mathematical Guardrails**: LLM hallucinations are vetoed by deterministic risk math (200 SMA long-term regime filter, RSI overbought cap, and ATR-based 1% account risk position sizing).
+> **Sentiment and the model may only reduce conviction or veto. They can never create a
+> directional signal the rules do not support, and they never alter entry, stop, target or
+> position size. Deterministic account-risk vetoes resolve last.**
 
----
-
-## 🧩 High-Level Architecture
-
-```mermaid
-flowchart TD
-    subgraph Data Layer
-        NSE[NSE India / Yahoo Finance] --> DB_MGR[Database Manager]
-        DB_MGR --> SQLITE[(SQLite: market_data.db)]
-        BOOKS[Financial Classics PDFs] --> RAG_IDX[RAG Indexer]
-        RAG_IDX --> CHROMA[(ChromaDB Vector Store)]
-        NEWS[yfinance Financial News] --> SENT_ENG[Sentiment Analyzer]
-        SENT_ENG --> SQLITE
-    end
-
-    subgraph Analytical Engines
-        SQLITE --> ML_COMP[Model Comparator]
-        ML_COMP --> BEST_ML[best_model.pkl]
-        SQLITE --> CANDLE[15 Candlestick Vector Engine]
-        SQLITE --> QUANT[Quant & Risk Engine]
-    end
-
-    subgraph Multi-Agent State Machine
-        CHROMA --> RAG_AGENT[RAG Strategy Agent]
-        SENT_ENG --> SENT_AGENT[Sentiment Agent]
-        SQLITE --> TECH_AGENT[Technical Agent]
-        
-        TECH_AGENT --> RAG_AGENT
-        RAG_AGENT --> SENT_AGENT
-        SENT_AGENT --> BEAR_AGENT[Bear Advocate / Risk Finder]
-        BEAR_AGENT --> LEAD_AGENT[Lead Portfolio Manager]
-    end
-
-    subgraph Execution & Governance
-        LEAD_AGENT --> GUARD[Mathematical Guardrails Check]
-        QUANT --> GUARD
-        BEST_ML --> APP_EXEC[Streamlit Execution Engine]
-        GUARD --> APP_EXEC
-    end
-
-    subgraph Presentation
-        APP_EXEC --> UI[Streamlit Trading Terminal]
-        CANDLE --> UI
-    end
-```
-
----
-
-## 🔬 System Modules & Components
-
-### 1. Data Pipeline & Persistence (`src/data_pipeline/`)
-
-- **`database_manager.py`**:
-  - Central manager for SQLite database (`data/market_data.db`).
-  - Maintains `daily_ohlcv` (timestamp, open, high, low, close, adj_close, volume) and `stock_sentiment` (scores, labels, summaries).
-  - Handles schema migrations dynamically (e.g., adding `adj_close` to legacy databases).
-  - Seeds up to 5 years (1825 days) of historical price action across 84 Nifty tickers via `yfinance` (with symbol normalizations like `TATAMOTORS -> TMPV`).
-  - Implements incremental delta syncing (`update_latest_data`) and real-time live intraday candle upserts (`update_today_live_data`).
-- **`broker_client.py`**:
-  - Direct integration with official National Stock Exchange endpoints via `jugaad-data` for equity series (`EQ`).
-  - Computes technical indicators natively using `pandas-ta` (20 EMA, 50 SMA, 200 SMA, 14 RSI, MACD, 14 ATR).
-- **`update_daily.py`**:
-  - Lightweight entrypoint for cron jobs or automated daily batch ingestion.
-
----
-
-### 2. Machine Learning Engine (`src/ml_engine/`)
-
-- **`model_comparator.py`**:
-  - Rigorous walk-forward time-series benchmarking across **6 machine learning algorithms**:
-    1. Logistic Regression
-    2. Random Forest Classifier
-    3. XGBoost Classifier
-    4. LightGBM Classifier
-    5. CatBoost Classifier
-    6. Support Vector Machine (SVC with probabilistic output)
-  - **Leakage Elimination**: All feature inputs are strictly 1-day lagged (`_lag1`) to avoid look-ahead bias.
-  - **Validation**: Evaluates models using `TimeSeriesSplit(n_splits=5)`, picking the best model based on out-of-sample precision to minimize false-positive breakout trades.
-  - Serializes the champion model to `data/models/best_model.pkl`.
-- **`model_trainer.py`**:
-  - Standalone baseline trainer using `XGBClassifier` with chronological 80/20 train/test split.
-  - Predicts whether $Close_{t+1} > Close_{t}$.
-- **`deep_learning_predictor.py`**:
-  - 2-layer Bidirectional LSTM (Bi-LSTM) sequence model with dropout and residual linear heads.
-  - Takes 30-period normalized sequential tensors of Open, High, Low, Close, Volume, 1d Return, Volatility, and RSI.
-  - Forecasts the continuous multi-step price envelope: **Predicted Close, Predicted High, Predicted Low, Expected Return %, and Volatility Spread %**.
-- **`candle_patterns.py`**:
-  - High-performance, fully vectorized identification of 15 classic Japanese candlestick patterns using pure pandas and numpy boolean masks.
-
----
-
-### 3. Quant Pricing & Risk Management Engine (`src/quant_engine/`)
-
-- **`pricing_engine.py` (Institutional Multi-Factor Equity Pricing Engine)**:
-  - **Volume-Weighted Microstructure**: Session-anchored VWAP and institutional volatility bands ($\pm 1\sigma, \pm 2\sigma$) for mean-reversion exhaustion and value absorption.
-  - **Confluence Pivot Equations**: Camarilla Floor Pivots ($H3, H4, L3, L4$) and Fibonacci extensions ($1.618, 2.618$).
-  - **Stochastic Merton Jump-Diffusion Monte Carlo**: 1,000 simulations over a 5-day horizon modeling Poisson jump intensity ($\lambda$) for news/earnings shocks, computing **Expected Terminal Price**, **95th Percentile Upside**, and **5-Day 95% Value at Risk (VaR)**.
-  - **Multi-Factor Alpha Model**: Composite score spanning Momentum, Volume Force, and Mean Reversion.
-  - **Statistical Market Regime Classification**: Classifies stocks into *Trending Bullish*, *Trending Bearish*, *Mean-Reverting Range*, or *High-Volatility Shock*.
-  - **Theoretical Fair Value & Mispricing Edge**: Computes intrinsic auction center and **Alpha Mispricing %** ($\frac{P_{\text{fair}} - P_{\text{market}}}{P_{\text{market}}} \times 100\%$) to identify undervalued vs. overvalued setups.
-- **`risk_math.py`**:
-  - **Harmonized Volatility Levels**: Blends ATR volatility buffers ($1.5 \times \text{ATR}_{14}$) with Deep Learning bounds and Camarilla levels for tighter Stop-Losses and 1:2 / 1:3 profit targets.
-  - **Position Sizing (1% Risk Rule)**:
-    $$\text{Capital at Risk} = \text{Portfolio Size} \times 1\%$$
-    $$\text{Position Size (Shares)} = \left\lfloor \frac{\text{Capital at Risk}}{|\text{Entry Price} - \text{Stop Loss}|} \right\rfloor$$
-  - **Deterministic Safety Guardrails**:
-    - *Confidence Guardrail*: Requires minimum confidence score ($\ge 70\%$) before triggering BUY/SELL.
-    - *Regime Guardrail*: Vetoes BUY signals if price trades below the 200-day Simple Moving Average (downtrend regime filter).
-    - *Overbought Guardrail*: Vetoes BUY signals if RSI(14) > 75 to prevent buying extended tops.
-
----
-
-### 4. RAG Strategy Knowledge Base (`src/rag_engine/`)
-
-- Grounded in canonical financial literature stored in `data/books/`:
-  1. *Technical Analysis of the Financial Markets* — John J. Murphy
-  2. *Japanese Candlestick Charting Techniques* — Steve Nison
-  3. *How to Make Money in Stocks* — William J. O'Neil
-  4. *Coffee Can Investing: The Low Risk Route to Stupendous Wealth* — Saurabh Mukherjea
-  5. *Zerodha Varsity Trading Manuals*
-- **`indexer.py`**:
-  - Ingests PDFs, chunks content via `RecursiveCharacterTextSplitter` ($chunk\_size=1000, overlap=200$).
-  - Batches embeddings via local Ollama (`nomic-embed-text`) into ChromaDB (`data/chromadb`).
-- **`retriever.py`**:
-  - Similarity search engine querying textbook literature to supply proven trading rules and historical context to the LangGraph agents.
-
----
-
-### 5. Sentiment Engine (`src/sentiment_engine/`)
-
-- **`sentiment_analyzer.py`**:
-  - Scrapes real-time headlines for Nifty equities using `yfinance`.
-  - Applies a financially-tuned lexicon weighting bullish terms (*surge, jump, gain, profit, rally, upgrade, beat*) vs. bearish terms (*fall, drop, loss, crash, bear, downgrade, miss, probe, slump*).
-  - Normalizes scores in range $[-1.0, +1.0]$ and categorizes into `BULLISH`, `BEARISH`, or `NEUTRAL`.
-  - Persists analysis history to `stock_sentiment` in SQLite.
-
----
-
-### 6. LangGraph Multi-Agent Orchestrator (`src/agents/`)
-
-Built as an assembly line state machine via `langgraph`:
-
-```mermaid
-stateDiagram-v2
-    [*] --> Technical: Stock Ticker + OHLCV + Indicators
-    Technical --> RAG: Trend & Momentum Summary
-    RAG --> Sentiment: Rulebook Context Validation
-    Sentiment --> Bear: Macro & News Alignment
-    Bear --> Lead: Devil's Advocate & Risk Objections
-    Lead --> [*]: Structured JSON Final Trade Signal
-```
-
-- **`state.py`**: Defines `AgentTradingState` (ticker, price, data feeds, agent transcripts, and final signal).
-- **`agent_nodes.py`**:
-  - **Technical Agent**: Quant analyst diagnosing indicator confluence (RSI, EMAs, MACD).
-  - **RAG Strategy Agent**: Validates technical setups against Murphy/Nison/O'Neil textbook rules.
-  - **Sentiment Agent**: Synthesizes market news and sector conditions.
-  - **Bear Advocate**: Dedicated devil's advocate probing for bull traps, hidden overhead resistance, and risk exposures.
-  - **Lead Synthesizer**: Portfolio manager that weighs all inputs and enforces valid JSON execution:
-    ```json
-    {
-      "action": "BUY" | "SELL" | "HOLD",
-      "confidence_score": 0-100,
-      "reasoning": "1 sentence executive summary"
-    }
-    ```
-- **`orchestrator.py`**: Compiles the nodes into an executable LangGraph directed cyclic/acyclic graph.
-
----
-
-### 7. Interactive Streamlit Dashboard (`app/`)
-
-- **`app/main.py`**:
-  - **Ticker Selector**: Dropdown powered by `config/watchlist.json` covering 84 Nifty stocks.
-  - **Real-Time Metrics**: Latest close, percentage day-change, and news sentiment summary.
-  - **ML Probability Gauge**: Evaluates the pre-trained champion model (`best_model.pkl`) to compute upward movement probability.
-  - **Execution Signal Card**: Automatically calculates `Entry`, `Target Price (Take Profit)`, and `Stop-Loss Level` using ATR volatility.
-  - **Interactive Plotly Candlestick Chart**: Zoomable OHLCV charts with volume and moving average overlays.
-  - **15-Rule Candlestick Scanner**: Live visual grid displaying active/inactive candlestick patterns detected in the current session.
-- **`app/components/`**:
-  - `chart_view.py`: Specialized candlestick chart with shaded risk/reward zones (green for profit, red for risk).
-  - `agent_cards.py`: Expandable cards presenting the full multi-agent transcript and debate.
-
----
-
-## 🚦 Deterministic Risk Rules & Guardrails
-
-| Guardrail Rule | Condition | Action Taken |
-| :--- | :--- | :--- |
-| **Minimum Confidence Threshold** | Confidence Score $< 70\%$ | Signal overridden to **HOLD** |
-| **200-Day SMA Regime Filter** | Action = BUY and $Close < SMA_{200}$ | Vetoed to **HOLD** (Downtrend regime) |
-| **RSI Overbought Filter** | Action = BUY and $RSI_{14} > 75$ | Vetoed to **HOLD** (Overextended top) |
-| **Volatility Stop-Loss** | BUY or SELL | Placed at $1.5 \times ATR_{14}$ from entry |
-| **Fixed Risk Position Sizing** | Account Size $\times 1\%$ | Capped at exact share count to limit downside |
-
----
-
-## 🕯️ Supported Candlestick Patterns
-
-The vectorized pattern detector in `candle_patterns.py` scans for:
-
-1. **Doji** (Indecision)
-2. **Bullish Marubozu** (Strong buyer dominance)
-3. **Bearish Marubozu** (Strong seller dominance)
-4. **Hammer** (Bullish reversal rejection)
-5. **Shooting Star** (Bearish reversal rejection)
-6. **Bullish Engulfing** (Two-candle bullish turnaround)
-7. **Bearish Engulfing** (Two-candle bearish turnaround)
-8. **Piercing Line** (Bullish recovery through mid-body)
-9. **Dark Cloud Cover** (Bearish penetration into previous body)
-10. **Morning Star** (Three-candle bullish reversal)
-11. **Evening Star** (Three-candle bearish reversal)
-12. **Three White Soldiers** (Sustained three-period bull march)
-13. **Three Black Crows** (Sustained three-period bear rout)
-14. **Spinning Top** (Equilibrium / contraction)
-15. **Hanging Man** (Top reversal warning following uptrend)
-
----
-
-## 📁 Repository Structure
+This is structural, not a convention. Conviction is
 
 ```
-AI Stock Market Analyzer/
-├── app/
-│   ├── components/
-│   │   ├── agent_cards.py           # Multi-agent debate UI display
-│   │   └── chart_view.py            # Plotly interactive charting with R:R bands
-│   └── main.py                      # Main Streamlit web application
-├── config/
-│   └── watchlist.json               # 84-stock NSE Nifty watchlist
-├── data/
-│   ├── books/                       # Foundational finance PDFs for RAG
-│   ├── chromadb/                    # Persistent vector database
-│   ├── models/
-│   │   ├── best_model.pkl           # Champion model after walk-forward validation
-│   │   └── xgboost_model.pkl        # Baseline XGBoost binary
-│   └── market_data.db               # SQLite database (OHLCV + Sentiment)
-├── src/
-│   ├── agents/
-│   │   ├── agent_nodes.py           # LLM agent definitions (Ollama / Llama 3.2)
-│   │   ├── orchestrator.py          # LangGraph state machine assembly line
-│   │   └── state.py                 # TypedDict trading state schema
-│   ├── backtesting/                 # Framework for historical strategy replay
-│   ├── data_pipeline/
-│   │   ├── broker_client.py         # jugaad-data NSE fetcher + indicators
-│   │   ├── database_manager.py      # SQLite ingestion, seeding & syncing
-│   │   └── update_daily.py          # Daily batch incremental updater
-│   ├── ml_engine/
-│   │   ├── candle_patterns.py       # 15 vectorized candlestick pattern detectors
-│   │   ├── model_comparator.py      # 6-model walk-forward benchmark (TimeSeriesSplit)
-│   │   └── model_trainer.py         # XGBoost model training pipeline
-│   ├── quant_engine/
-│   │   └── risk_math.py             # ATR levels, 1% sizing & deterministic guardrails
-│   ├── rag_engine/
-│   │   ├── indexer.py               # Book PDF chunking & Ollama vector indexing
-│   │   └── retriever.py             # Chroma similarity search for trading rules
-│   └── sentiment_engine/
-│       └── sentiment_analyzer.py    # News headline scraper & sentiment scoring
-├── .env                             # Environment variables & API keys
-├── .gitignore                       # Git ignore filters
-├── requirements.txt                 # Python package dependencies
-└── README.md                        # Master repository documentation
+conviction = setup_grade × (1 − penalty_algo) × (1 − penalty_sentiment)
 ```
+
+where `setup_grade` comes only from the rule layer and each penalty is clamped to
+`[0, max]`. Positive news maps to a penalty of exactly **zero**, so it cannot add
+conviction; an unavailable component also maps to zero, so absence is never a silent 50%.
+`setup_grade = 0` forces `conviction = 0`.
+
+`tests/test_composite.py` exists to prove this: it sweeps sentiment across 21 values with
+no rule setup and asserts the action never leaves `HOLD`, asserts a maximally bullish
+model cannot create a signal, and asserts that a plan is either removed entirely or left
+byte-identical — never repriced or resized.
 
 ---
 
-## 🚀 Installation & Setup
+## Quick start
 
-### 1. Prerequisites
-- **Python 3.10+**
-- **Ollama** (for local LLMs & Embeddings):
-  ```bash
-  # Install Llama 3.2 and Nomic Embeddings
-  ollama pull llama3.2
-  ollama pull nomic-embed-text
-  ```
+Python 3.12. From the project root:
 
-### 2. Environment Setup
 ```bash
-# Clone the repository
-git clone https://github.com/rahulh1998/AI-Stock-Market-Analyzer.git
-cd "AI Stock Market Analyzer"
-
-# Create and activate virtual environment
 python -m venv .venv
-# On Windows:
 .venv\Scripts\activate
-# On Linux/macOS:
-source .venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
+python -m scripts.update_market_data
+python -m streamlit run app/main.py --server.address 127.0.0.1
 ```
 
-### 3. Initialize Data & Models
+`update_market_data` fills each ticker's gap incrementally and prints what it did,
+including any ticker it could not fetch. No API keys are needed. Ollama is optional and
+only used by the deprecated agent/RAG panels.
+
+FinBERT (`ProsusAI/finbert`, ~440MB) downloads on first sentiment use. If it cannot load,
+scoring falls back to a keyword lexicon and every reading is tagged `lexicon_fallback`.
+
+---
+
+## The three workspaces
+
+### 1. Trading signals (default)
+
+- **Scanner** — concurrent watchlist scan, ranked by action then conviction. Button-
+  triggered, not re-run on every widget change. *Fast mode* skips the nearest-neighbour
+  model and uses only cached sentiment, and each row lists which components were deferred,
+  so a conviction number is never quietly built from fewer inputs than it claims.
+- **Deep dive** — full evaluation of one ticker: the plan, the setup-grade axes, the risk
+  terms, every blocking reason, both components with their reasons, the multi-horizon news
+  breakdown, and a "record in paper book" button.
+- **Paper book** — open positions, closed trades, equity curve, win rate, profit factor,
+  expectancy, drawdown, and the log of every signal generated whether taken or not.
+
+**Evaluation clock.** The engine marks intraday data stale two bars after its close, which
+is correct but means every intraday signal reads `HISTORICAL_ONLY` outside 09:15–15:30 IST.
+*Last completed bar (review)* evaluates as at the last finished bar instead, and is
+labelled as a review of a completed session rather than a live signal. (Exchange holidays
+are **not** modelled — only weekday and clock time.)
+
+### 2. Research & historical paper replay
+
+The earlier cost-aware research workbench: fetch candles, inspect provenance, run a
+deterministic long-only replay of the EMA/VWAP baseline, export a CSV trade ledger, and use
+a standalone position calculator. Unchanged.
+
+### 3. Experimental AI dashboard (deprecated)
+
+Kept for reference and **marked deprecated in the UI**. Its signal path is permanently
+vetoed to `HOLD` by design (it passes `research_only=True` into `verify_signal_guardrails`)
+and its ML gauge is not wired to a validated model. That behaviour is pinned by
+`tests/test_research.py`, so it was left exactly as it was rather than rewired.
+
+---
+
+## How a signal is built
+
+```
+candles ─► validate_bars ─► pattern_features (Wilder RSI/ATR/ADX, 14 patterns, session VWAP)
+                                   │
+                                   ├─► analyze_market        (long gates)   ─┐
+                                   └─► analyze_market_short   (short gates)  ├─► direction + plan
+                                                                             │
+   setup_grade (5 continuous axes) ─────────────────────────────────────────┘
+                 │
+                 ├── × (1 − algo penalty)        ← historical neighbours, abstains honestly
+                 └── × (1 − sentiment penalty)   ← FinBERT over entity-matched headlines
+                              │
+                              ├─► conviction floor
+                              └─► risk score + hard vetoes (liquidity, participation)
+                                          │
+                                          └─► TradeSignal ─► paper book
+```
+
+**Rule layer.** The six long gates stay hard booleans. They are near-collinear by
+construction (`trend_atr` is literally `(ema_fast − ema_slow)/atr`), so weighting them
+would count one piece of evidence five times. Grading instead happens on five continuous
+axes — trend, ADX, relative volume, net reward:risk and pattern strength — measuring margin
+*above* the pass mark, and is shown as a letter grade so it cannot be misread as a percent.
+
+**Shorts** are `SHORT_ENTRY`, intraday only, because NSE cash delivery cannot be sold
+short. That is enforced in three places: `build_short_plan` (the only producer of short
+prices), `analyze_market_short` (rejects `1d`), and the paper book at insert. The cost
+model needs no change for shorts — `EquityCosts.breakdown` keys off `side`, so a short's
+SELL entry correctly pays intraday STT and its BUY exit pays stamp duty.
+
+**Risk** aggregates as a saturating soft-OR, not a mean, so one severe term dominates
+rather than being diluted by six benign ones. Term breakpoints saturate exactly where the
+engine's own vetoes fire, so the score and the vetoes agree at the boundary.
+
+**Sentiment** is entity-matched before it is scored. The hard part is not the classifier:
+a bare-ticker query returns the wrong company (searching `RELIANCE` returns "Reliance
+Power"), short aliases overlap (`SBI` is a substring of `SBI Cards` and `SBI Life`, both
+separate instruments here), and index round-ups mention many companies and are about none.
+`config/instruments.json` carries curated aliases; matching prefers the longest alias,
+matches the bare ticker **case-sensitively** as a symbol, drops quote pages and round-ups,
+dedupes on a normalised title, and parses real publication timestamps so the 1h/1d/7d
+buckets mean something.
+
+**Paper book** is a single append-only `paper_events` table; positions, cash and P&L are
+derived by query. Writes are idempotent on a content-hashed event id, so a Streamlit rerun
+cannot double-fill, and state reconciles after a restart. Barrier resolution is delegated
+to `research.resolve_exit`, the same function the historical replay uses, so the two cannot
+drift: a gap through the stop fills at the worse open, and if both barriers are touched in
+one bar the stop wins.
+
+---
+
+## Layout
+
+```
+app/
+  main.py                          workspace switch
+  components/
+    signals_workspace.py           scanner, deep dive, paper book
+    research_workbench.py          cost-aware replay workbench
+    decision_panel.py              pattern/risk panel
+    chart_view.py  agent_cards.py
+config/
+  watchlist.json                   82 NSE tickers
+  instruments.json                 company names, curated aliases, tick size, feed status
+src/
+  paths.py                         project locations (no cwd dependence)
+  signal_engine/
+    composite.py                   TradeSignal, generate_signal, penalties  [CLI]
+    scoring.py                     setup_grade, risk_score
+    scanner.py                     concurrent scan, market-hours clock policy
+  quant_engine/
+    decision_engine.py             patterns, gates, build_long_plan, build_short_plan
+    research.py                    EquityCosts, validate_bars, sizing, replay, resolve_exit
+  sentiment_engine/
+    news_sources.py                entity matching, dedup, timestamps  [CLI]
+    finbert_scorer.py              FinBERT + lexicon fallback, cached  [CLI]
+    multi_horizon.py               1h/1d/7d buckets, divergence  [CLI]
+  paper_trading/ledger.py          append-only paper book
+  ml_engine/
+    historical_neighbors.py        the algo component (causal, abstains)
+    model_comparator.py            NOT wired in - see "Known limitations"
+    deep_learning_predictor.py     NOT wired in - experimental
+  data_pipeline/                   Yahoo fetcher + SQLite
+scripts/
+  update_market_data.py            incremental gap-filling updater
+  check_setup.py                   read-only diagnostics
+```
+
+### Command-line entry points
+
 ```bash
-# 1. Seed historical stock data into SQLite (5-year history)
-python src/data_pipeline/database_manager.py
-
-# 2. Index the financial literature into ChromaDB
-python src/rag_engine/indexer.py
-
-# 3. Benchmark ML models and export the champion classifier
-python src/ml_engine/model_comparator.py
-
-# 4. Fetch initial news sentiment
-python src/sentiment_engine/sentiment_analyzer.py
+python -m src.signal_engine.composite --ticker RELIANCE --interval 15m
+python -m src.signal_engine.composite --ticker TITAN --interval 1d --as-of 2024-09-05
+python -m src.sentiment_engine.news_sources --ticker RELIANCE
+python -m src.sentiment_engine.multi_horizon --ticker RELIANCE
+python -m scripts.update_market_data --seed-years 5
+python -m unittest discover -s tests -t .
 ```
 
 ---
 
-## 🖥 Running the Application
+## Known limitations
 
-Launch the Streamlit dashboard:
+These are real and deliberate; none is silently papered over.
 
-```bash
-streamlit run app/main.py
-```
+- **No broker, no orders, no live tick feed.** Yahoo data is research-grade; freshness is
+  unverified and every quote carries `execution_eligible: False`.
+- **No exchange holiday calendar.** Session detection is weekday plus clock time only.
+- **Confidence is usually absent.** It appears only after 30 closed paper trades in a
+  bucket. That is the point: it is the one measured number here.
+- **The tabular ML path is not wired in and not validated.** `model_comparator` trains on
+  11 lagged features while the old dashboard fed it 15 differently-named ones, and it
+  concatenates every ticker before a row-index `TimeSeriesSplit`, so folds interleave
+  tickers and dates. Worse, it trains on absolute price levels in a cross-sectional panel,
+  which teaches a tree ticker identity rather than market structure. Rebuilding it needs
+  scale-free features and date-based purged splits; until then the algo component is the
+  nearest-neighbour model, which abstains when it cannot beat a flat baseline.
+- **`LTIM` has no Yahoo feed** under any symbol variant tried, and is marked
+  `feed_available: false` in `instruments.json` so it is skipped with a stated reason
+  instead of showing zero placeholders.
+- **Survivorship bias.** The watchlist is today's list applied to five years of history.
+- **A stop is not a guaranteed maximum loss.** Gaps, circuits, illiquidity and execution
+  failures can all exceed it.
 
-Once running, navigate to `http://localhost:8501` in your browser.
+See [docs/REALISTIC_TRADING_ROADMAP.md](docs/REALISTIC_TRADING_ROADMAP.md) for the prior
+audit and the phased plan, and [docs/PATTERN_RISK_ANALYSIS.md](docs/PATTERN_RISK_ANALYSIS.md)
+for pattern definitions and risk rules.
 
 ---
 
-## 📋 Configuration & Watchlist
+## Tests
 
-The monitored equities can be customized at [`config/watchlist.json`](file:///c:/Users/rahul/OneDrive/Desktop/AI%20Stock%20Market%20Analyzer/config/watchlist.json). The system automatically tracks **84 top liquid tickers** across major sectors:
+```bash
+python -m unittest discover -s tests -t .
+```
 
-- **Banking & Financials**: HDFCBANK, ICICIBANK, SBIN, KOTAKBANK, AXISBANK, BAJFINANCE, BAJAJFINSV, CHOLAFIN, SHRIRAMFIN, MUTHOOTFIN
-- **Information Technology**: TCS, INFY, HCLTECH, WIPRO, TECHM, LTIM, PERSISTENT, MPHASIS, COFORGE
-- **Energy & Conglomerates**: RELIANCE, ONGC, NTPC, POWERGRID, COALINDIA, BPCL, IOC, GAIL
-- **Automobile**: MARUTI, M&M, BAJAJ-AUTO, HEROMOTOCO, EICHERMOT, TVSMOTOR
-- **Consumer Goods & Retail**: ITC, HINDUNILVR, TITAN, BRITANNIA, TATACONSUM, NESTLEIND, DABUR, MARICO, COLPAL, PIDILITIND
-- **Metals & Mining**: TATASTEEL, JSWSTEEL, HINDALCO, VEDL, JINDALSTEL, NMDC, HINDZINC
-- **Pharmaceuticals**: SUNPHARMA, CIPLA, DRREDDY, DIVISLAB, APOLLOHOSP
-- **Capital Goods & Defense**: LT, SIEMENS, ABB, HAL, BEL
-- **New-Age & Consumer Tech**: ZOMATO, PAYTM, NYKAA, POLICYBZR
+| Suite | Covers |
+|---|---|
+| `test_composite.py` | the invariants: sentiment/model cannot create or reprice a trade, veto precedence, JSON safety on every branch |
+| `test_decision_engine.py` | Wilder maths, prefix causality including pivots, plan geometry, account locks |
+| `test_research.py` | cost model, cash/risk sizing, replay fill rules |
+| `test_paper_ledger.py` | idempotent writes, restart reconciliation, stop-before-target, gap fills, Wilson intervals |
+| `test_sentiment.py` | entity matching (Reliance Power, the SBI family), dedup, timestamps, scorer fallback |
+| `test_workbench.py` | offline Streamlit flows; the default workspace loads no torch/langgraph/transformers |

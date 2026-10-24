@@ -96,7 +96,7 @@ def render_research_workbench():
             if result["trades"].empty:
                 st.info("No eligible trades. This is a valid result; do not force a signal.")
             else:
-                st.dataframe(result["trades"], use_container_width=True)
+                st.dataframe(result["trades"], width='stretch')
                 st.download_button("Export hypothetical trade ledger", result["trades"].to_csv(index=False),
                                    f"{ticker}_replay.csv", "text/csv")
     st.subheader("Independent cost-aware long-position calculator")

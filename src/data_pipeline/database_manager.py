@@ -1,3 +1,6 @@
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 import sqlite3
 import pandas as pd
 import pandas_ta as ta
@@ -11,9 +14,11 @@ import os
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.getcwd(), "data", "market_data.db")
-CONFIG_DIR = os.path.join(os.getcwd(), "config")
-CONFIG_PATH = os.path.join(CONFIG_DIR, "watchlist.json")
+from src.paths import CONFIG_DIR as _CONFIG_DIR, DB_PATH as _DB_PATH, WATCHLIST_PATH
+
+DB_PATH = str(_DB_PATH)
+CONFIG_DIR = str(_CONFIG_DIR)
+CONFIG_PATH = str(WATCHLIST_PATH)
 
 class DatabaseManager:
     def __init__(self):

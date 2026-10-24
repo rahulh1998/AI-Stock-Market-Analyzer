@@ -18,11 +18,28 @@ import time
 from datetime import datetime
 
 st.set_page_config(page_title="NSE Research Terminal", page_icon="📈", layout="wide")
-workspace = st.sidebar.radio("Workspace", ["Research & historical paper replay", "Experimental AI dashboard"])
+workspace = st.sidebar.radio("Workspace", [
+    "Trading signals",
+    "Research & historical paper replay",
+    "Experimental AI dashboard (deprecated)",
+])
+if workspace == "Trading signals":
+    from app.components.signals_workspace import render_signals_workspace
+    render_signals_workspace()
+    st.stop()
 if workspace == "Research & historical paper replay":
     from app.components.research_workbench import render_research_workbench
     render_research_workbench()
     st.stop()
+
+# The legacy dashboard below is deprecated and cannot emit a BUY or SELL: it passes
+# research_only=True into verify_signal_guardrails, which vetoes unconditionally, and it
+# reads a SMA_200 column that get_stock_data never produces. That behaviour is pinned by
+# tests/test_research.py (test_legacy_sizing_and_veto), so it is left exactly as it was
+# rather than rewired. Use the Trading signals workspace instead.
+st.error("Deprecated workspace. Its signal path is permanently vetoed to HOLD by design "
+         "and its ML probability gauge is not wired to a validated model. It is kept for "
+         "reference only - use **Trading signals** for actual signals.")
 
 from src.data_pipeline.broker_client import MarketDataFetcher
 from src.data_pipeline.database_manager import DatabaseManager
@@ -38,9 +55,11 @@ from src.rag_engine.retriever import StrategyRetriever
 from app.components.chart_view import render_candlestick
 from app.components.agent_cards import render_agent_debate
 
-DB_PATH = os.path.join(os.getcwd(), "data", "market_data.db")
-CONFIG_PATH = os.path.join(os.getcwd(), "config", "watchlist.json")
-MODEL_PATH = os.path.join(os.getcwd(), "data", "models", "best_model.pkl")
+from src.paths import BEST_MODEL_PATH, DB_PATH as _DB_PATH, WATCHLIST_PATH
+
+DB_PATH = str(_DB_PATH)
+CONFIG_PATH = str(WATCHLIST_PATH)
+MODEL_PATH = str(BEST_MODEL_PATH)
 
 # Initialize services
 def get_services():
@@ -180,7 +199,7 @@ with tab1:
 
         st.dataframe(
             df_table.reset_index(drop=True),
-            use_container_width=True,
+            width='stretch',
             height=480
         )
     else:
@@ -373,7 +392,7 @@ with tab2:
         buy_markers=buy_markers,
         sell_markers=sell_markers
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     # ==============================================================================
     # 🏛️ INSTITUTIONAL PRICING ENGINE SCORECARD

@@ -12,6 +12,8 @@ validation-*.log
 
 # Databases and Local Data
 *.db
+*.db-wal
+*.db-shm
 *.sqlite3
 data/chromadb/
 

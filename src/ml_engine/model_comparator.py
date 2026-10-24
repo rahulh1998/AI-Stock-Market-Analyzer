@@ -1,4 +1,7 @@
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+import os
 import sqlite3
 import logging
 import json
@@ -17,10 +20,12 @@ from sklearn.metrics import accuracy_score, precision_score
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.getcwd(), "data", "market_data.db")
-CONFIG_PATH = os.path.join(os.getcwd(), "config", "watchlist.json")
-MODEL_DIR = os.path.join(os.getcwd(), "data", "models")
-BEST_MODEL_PATH = os.path.join(MODEL_DIR, "best_model.pkl")
+from src.paths import BEST_MODEL_PATH as _BEST, DB_PATH as _DB_PATH, MODEL_DIR as _MODEL_DIR, WATCHLIST_PATH
+
+DB_PATH = str(_DB_PATH)
+CONFIG_PATH = str(WATCHLIST_PATH)
+MODEL_DIR = str(_MODEL_DIR)
+BEST_MODEL_PATH = str(_BEST)
 
 class ModelComparator:
     def __init__(self):

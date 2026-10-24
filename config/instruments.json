@@ -1,0 +1,1025 @@
+{
+  "schema_version": 1,
+  "generated": "2026-10-23",
+  "source": "Yahoo longName/shortName, plus curated overrides and acronyms",
+  "alias_rule": "Generated aliases keep >=2 tokens; single-token aliases are curated only. Aliases colliding across instruments are removed. Single-token aliases that are common English words are excluded (\"Eternal\" for ZOMATO). Prefix-overlapping aliases across instruments (SBI vs SBI Cards, SBI Life) are resolved by longest-alias-wins in the news matcher, not by editing aliases.",
+  "default_tick_size": 0.05,
+  "instruments": {
+    "RELIANCE": {
+      "company_name": "Reliance Industries Limited",
+      "yahoo_symbol": "RELIANCE.NS",
+      "sector": "Energy",
+      "aliases": [
+        "Reliance Industries Limited",
+        "Reliance Industries",
+        "RIL"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "TCS": {
+      "company_name": "Tata Consultancy Services Limited",
+      "yahoo_symbol": "TCS.NS",
+      "sector": "Technology",
+      "aliases": [
+        "Tata Consultancy Services Limited",
+        "Tata Consultancy Services",
+        "Tata Consultancy"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "HDFCBANK": {
+      "company_name": "HDFC Bank Limited",
+      "yahoo_symbol": "HDFCBANK.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "HDFC Bank Limited",
+        "HDFC Bank"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "INFY": {
+      "company_name": "Infosys Limited",
+      "yahoo_symbol": "INFY.NS",
+      "sector": "Technology",
+      "aliases": [
+        "Infosys Limited",
+        "Infosys"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "ICICIBANK": {
+      "company_name": "ICICI Bank Limited",
+      "yahoo_symbol": "ICICIBANK.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "ICICI Bank Limited",
+        "ICICI Bank"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "SBIN": {
+      "company_name": "State Bank of India",
+      "yahoo_symbol": "SBIN.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "State Bank of India",
+        "SBI",
+        "State Bank"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "BHARTIARTL": {
+      "company_name": "Bharti Airtel Limited",
+      "yahoo_symbol": "BHARTIARTL.NS",
+      "sector": "Communication Services",
+      "aliases": [
+        "Bharti Airtel Limited",
+        "Bharti Airtel"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "ITC": {
+      "company_name": "ITC Limited",
+      "yahoo_symbol": "ITC.NS",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "ITC Limited",
+        "ITC"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "KOTAKBANK": {
+      "company_name": "Kotak Mahindra Bank Limited",
+      "yahoo_symbol": "KOTAKBANK.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "Kotak Mahindra Bank Limited",
+        "Kotak Mahindra Bank"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "LT": {
+      "company_name": "Larsen & Toubro Limited",
+      "yahoo_symbol": "LT.NS",
+      "sector": "Industrials",
+      "aliases": [
+        "Larsen & Toubro Limited",
+        "Larsen & Toubro",
+        "L&T",
+        "Larsen and Toubro"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "AXISBANK": {
+      "company_name": "Axis Bank Limited",
+      "yahoo_symbol": "AXISBANK.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "Axis Bank Limited",
+        "Axis Bank"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "HINDUNILVR": {
+      "company_name": "Hindustan Unilever Limited",
+      "yahoo_symbol": "HINDUNILVR.NS",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "Hindustan Unilever Limited",
+        "Hindustan Unilever",
+        "HUL"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "BAJFINANCE": {
+      "company_name": "Bajaj Finance Limited",
+      "yahoo_symbol": "BAJFINANCE.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "Bajaj Finance Limited",
+        "Bajaj Finance"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "ASIANPAINT": {
+      "company_name": "Asian Paints Limited",
+      "yahoo_symbol": "ASIANPAINT.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "Asian Paints Limited",
+        "Asian Paints"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "MARUTI": {
+      "company_name": "Maruti Suzuki India Limited",
+      "yahoo_symbol": "MARUTI.NS",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "Maruti Suzuki India Limited",
+        "Maruti Suzuki India",
+        "Maruti Suzuki"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "SUNPHARMA": {
+      "company_name": "Sun Pharmaceutical Industries Limited",
+      "yahoo_symbol": "SUNPHARMA.NS",
+      "sector": "Healthcare",
+      "aliases": [
+        "Sun Pharmaceutical Industries Limited",
+        "Sun Pharmaceutical Industries"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "TITAN": {
+      "company_name": "Titan Company Limited",
+      "yahoo_symbol": "TITAN.NS",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "Titan Company Limited",
+        "Titan Company"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "NTPC": {
+      "company_name": "NTPC Limited",
+      "yahoo_symbol": "NTPC.NS",
+      "sector": "Utilities",
+      "aliases": [
+        "NTPC Limited",
+        "NTPC"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "ONGC": {
+      "company_name": "Oil and Natural Gas Corporation Limited",
+      "yahoo_symbol": "ONGC.NS",
+      "sector": "Energy",
+      "aliases": [
+        "Oil and Natural Gas Corporation Limited",
+        "Oil and Natural Gas Corporation",
+        "ONGC"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "POWERGRID": {
+      "company_name": "Power Grid Corporation of India Limited",
+      "yahoo_symbol": "POWERGRID.NS",
+      "sector": "Utilities",
+      "aliases": [
+        "Power Grid Corporation of India Limited",
+        "Power Grid Corporation of India",
+        "Power Grid Corporation"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "TATASTEEL": {
+      "company_name": "Tata Steel Limited",
+      "yahoo_symbol": "TATASTEEL.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "Tata Steel Limited",
+        "Tata Steel"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "JSWSTEEL": {
+      "company_name": "JSW Steel Limited",
+      "yahoo_symbol": "JSWSTEEL.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "JSW Steel Limited",
+        "JSW Steel"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "M&M": {
+      "company_name": "Mahindra & Mahindra Limited",
+      "yahoo_symbol": "M&M.NS",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "Mahindra & Mahindra Limited",
+        "Mahindra & Mahindra",
+        "Mahindra and Mahindra"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "ADANIENT": {
+      "company_name": "Adani Enterprises Limited",
+      "yahoo_symbol": "ADANIENT.NS",
+      "sector": "Energy",
+      "aliases": [
+        "Adani Enterprises Limited",
+        "Adani Enterprises"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "ADANIPORTS": {
+      "company_name": "Adani Ports and Special Economic Zone Limited",
+      "yahoo_symbol": "ADANIPORTS.NS",
+      "sector": "Industrials",
+      "aliases": [
+        "Adani Ports and Special Economic Zone Limited",
+        "Adani Ports and Special Economic Zone",
+        "Adani Ports"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "HCLTECH": {
+      "company_name": "HCL Technologies Limited",
+      "yahoo_symbol": "HCLTECH.NS",
+      "sector": "Technology",
+      "aliases": [
+        "HCL Technologies Limited",
+        "HCL Technologies"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "WIPRO": {
+      "company_name": "Wipro Limited",
+      "yahoo_symbol": "WIPRO.NS",
+      "sector": "Technology",
+      "aliases": [
+        "Wipro Limited"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "BAJAJFINSV": {
+      "company_name": "Bajaj Finserv Ltd.",
+      "yahoo_symbol": "BAJAJFINSV.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "Bajaj Finserv Ltd.",
+        "Bajaj Finserv"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "GRASIM": {
+      "company_name": "Grasim Industries Limited",
+      "yahoo_symbol": "GRASIM.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "Grasim Industries Limited",
+        "Grasim Industries"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "TATACONSUM": {
+      "company_name": "Tata Consumer Products Limited",
+      "yahoo_symbol": "TATACONSUM.NS",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "Tata Consumer Products Limited",
+        "Tata Consumer Products"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "BRITANNIA": {
+      "company_name": "Britannia Industries Limited",
+      "yahoo_symbol": "BRITANNIA.NS",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "Britannia Industries Limited",
+        "Britannia Industries"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "CIPLA": {
+      "company_name": "Cipla Limited",
+      "yahoo_symbol": "CIPLA.NS",
+      "sector": "Healthcare",
+      "aliases": [
+        "Cipla Limited"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "DIVISLAB": {
+      "company_name": "Divi's Laboratories Limited",
+      "yahoo_symbol": "DIVISLAB.NS",
+      "sector": "Healthcare",
+      "aliases": [
+        "Divi's Laboratories Limited",
+        "Divi's Laboratories",
+        "Divis Laboratories"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "EICHERMOT": {
+      "company_name": "Eicher Motors Limited",
+      "yahoo_symbol": "EICHERMOT.NS",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "Eicher Motors Limited",
+        "Eicher Motors"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "HDFCLIFE": {
+      "company_name": "HDFC Life Insurance Company Limited",
+      "yahoo_symbol": "HDFCLIFE.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "HDFC Life Insurance Company Limited",
+        "HDFC Life Insurance Company",
+        "HDFC Life"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "SBILIFE": {
+      "company_name": "SBI Life Insurance Company Limited",
+      "yahoo_symbol": "SBILIFE.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "SBI Life Insurance Company Limited",
+        "SBI Life Insurance Company",
+        "SBI Life"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "HINDZINC": {
+      "company_name": "Hindustan Zinc Limited",
+      "yahoo_symbol": "HINDZINC.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "Hindustan Zinc Limited",
+        "Hindustan Zinc"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "COALINDIA": {
+      "company_name": "Coal India Limited",
+      "yahoo_symbol": "COALINDIA.NS",
+      "sector": "Energy",
+      "aliases": [
+        "Coal India Limited",
+        "Coal India"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "BPCL": {
+      "company_name": "Bharat Petroleum Corporation Limited",
+      "yahoo_symbol": "BPCL.NS",
+      "sector": "Energy",
+      "aliases": [
+        "Bharat Petroleum Corporation Limited",
+        "Bharat Petroleum Corporation",
+        "Bharat Petroleum"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "IOC": {
+      "company_name": "Indian Oil Corporation Limited",
+      "yahoo_symbol": "IOC.NS",
+      "sector": "Energy",
+      "aliases": [
+        "Indian Oil Corporation Limited",
+        "Indian Oil Corporation",
+        "Indian Oil"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "GAIL": {
+      "company_name": "GAIL (India) Limited",
+      "yahoo_symbol": "GAIL.NS",
+      "sector": "Utilities",
+      "aliases": [
+        "GAIL (India) Limited",
+        "GAIL (India)",
+        "GAIL"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "ULTRACEMCO": {
+      "company_name": "UltraTech Cement Limited",
+      "yahoo_symbol": "ULTRACEMCO.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "UltraTech Cement Limited",
+        "UltraTech Cement"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "TECHM": {
+      "company_name": "Tech Mahindra Limited",
+      "yahoo_symbol": "TECHM.NS",
+      "sector": "Technology",
+      "aliases": [
+        "Tech Mahindra Limited",
+        "Tech Mahindra"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "NESTLEIND": {
+      "company_name": "Nestlé India Limited",
+      "yahoo_symbol": "NESTLEIND.NS",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "Nestlé India Limited",
+        "Nestlé India",
+        "Nestle India"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "DRREDDY": {
+      "company_name": "Dr. Reddy's Laboratories Limited",
+      "yahoo_symbol": "DRREDDY.NS",
+      "sector": "Healthcare",
+      "aliases": [
+        "Dr. Reddy's Laboratories Limited",
+        "Dr. Reddy's Laboratories",
+        "Dr Reddy's Laboratories",
+        "Dr. Reddy's"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "APOLLOHOSP": {
+      "company_name": "Apollo Hospitals Enterprise Limited",
+      "yahoo_symbol": "APOLLOHOSP.NS",
+      "sector": "Healthcare",
+      "aliases": [
+        "Apollo Hospitals Enterprise Limited",
+        "Apollo Hospitals Enterprise",
+        "Apollo Hospitals"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "HEROMOTOCO": {
+      "company_name": "Hero MotoCorp Limited",
+      "yahoo_symbol": "HEROMOTOCO.NS",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "Hero MotoCorp Limited",
+        "Hero MotoCorp"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "BAJAJ-AUTO": {
+      "company_name": "Bajaj Auto Limited",
+      "yahoo_symbol": "BAJAJ-AUTO.NS",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "Bajaj Auto Limited",
+        "Bajaj Auto"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "INDUSINDBK": {
+      "company_name": "IndusInd Bank Limited",
+      "yahoo_symbol": "INDUSINDBK.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "IndusInd Bank Limited",
+        "IndusInd Bank"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "SIEMENS": {
+      "company_name": "Siemens Limited",
+      "yahoo_symbol": "SIEMENS.NS",
+      "sector": "Industrials",
+      "aliases": [
+        "Siemens Limited"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "ABB": {
+      "company_name": "ABB India Limited",
+      "yahoo_symbol": "ABB.NS",
+      "sector": "Industrials",
+      "aliases": [
+        "ABB India Limited",
+        "ABB India"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "HAL": {
+      "company_name": "Hindustan Aeronautics Limited",
+      "yahoo_symbol": "HAL.NS",
+      "sector": "Industrials",
+      "aliases": [
+        "Hindustan Aeronautics Limited",
+        "Hindustan Aeronautics"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "BEL": {
+      "company_name": "Bharat Electronics Limited",
+      "yahoo_symbol": "BEL.NS",
+      "sector": "Industrials",
+      "aliases": [
+        "Bharat Electronics Limited",
+        "Bharat Electronics"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "TVSMOTOR": {
+      "company_name": "TVS Motor Company Limited",
+      "yahoo_symbol": "TVSMOTOR.NS",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "TVS Motor Company Limited",
+        "TVS Motor Company"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "CHOLAFIN": {
+      "company_name": "Cholamandalam Investment and Finance Company Limited",
+      "yahoo_symbol": "CHOLAFIN.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "Cholamandalam Investment and Finance Company Limited",
+        "Cholamandalam Investment and Finance Company",
+        "Cholamandalam Investment"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "SHRIRAMFIN": {
+      "company_name": "Shriram Finance Limited",
+      "yahoo_symbol": "SHRIRAMFIN.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "Shriram Finance Limited",
+        "Shriram Finance"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "ICICIPRULI": {
+      "company_name": "ICICI Prudential Life Insurance Company Limited",
+      "yahoo_symbol": "ICICIPRULI.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "ICICI Prudential Life Insurance Company Limited",
+        "ICICI Prudential Life Insurance Company",
+        "ICICI Prudential Life"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true,
+      "note": "Yahoo returns the imprecise name 'ICICI Life Insurance Limited'."
+    },
+    "SBICARD": {
+      "company_name": "SBI Cards and Payment Services Limited",
+      "yahoo_symbol": "SBICARD.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "SBI Cards and Payment Services Limited",
+        "SBI Cards and Payment Services",
+        "SBI Cards"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "MUTHOOTFIN": {
+      "company_name": "Muthoot Finance Limited",
+      "yahoo_symbol": "MUTHOOTFIN.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "Muthoot Finance Limited",
+        "Muthoot Finance"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "SRF": {
+      "company_name": "SRF Limited",
+      "yahoo_symbol": "SRF.NS",
+      "sector": "Industrials",
+      "aliases": [
+        "SRF Limited",
+        "SRF"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "PIIND": {
+      "company_name": "PI Industries Limited",
+      "yahoo_symbol": "PIIND.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "PI Industries Limited",
+        "PI Industries"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "UPL": {
+      "company_name": "UPL Limited",
+      "yahoo_symbol": "UPL.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "UPL Limited",
+        "UPL"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "AMBUJACEM": {
+      "company_name": "Ambuja Cements Limited",
+      "yahoo_symbol": "AMBUJACEM.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "Ambuja Cements Limited",
+        "Ambuja Cements"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "GODREJCP": {
+      "company_name": "Godrej Consumer Products Limited",
+      "yahoo_symbol": "GODREJCP.NS",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "Godrej Consumer Products Limited",
+        "Godrej Consumer Products"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "DABUR": {
+      "company_name": "Dabur India Limited",
+      "yahoo_symbol": "DABUR.NS",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "Dabur India Limited",
+        "Dabur India",
+        "Dabur"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "MARICO": {
+      "company_name": "Marico Limited",
+      "yahoo_symbol": "MARICO.NS",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "Marico Limited",
+        "Marico"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "COLPAL": {
+      "company_name": "Colgate-Palmolive (India) Limited",
+      "yahoo_symbol": "COLPAL.NS",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "Colgate-Palmolive (India) Limited",
+        "Colgate-Palmolive (India)",
+        "Colgate-Palmolive India",
+        "Colgate Palmolive"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "PIDILITIND": {
+      "company_name": "Pidilite Industries Limited",
+      "yahoo_symbol": "PIDILITIND.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "Pidilite Industries Limited",
+        "Pidilite Industries"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "BERGEPAINT": {
+      "company_name": "Berger Paints India Limited",
+      "yahoo_symbol": "BERGEPAINT.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "Berger Paints India Limited",
+        "Berger Paints India"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "VEDL": {
+      "company_name": "Vedanta Limited",
+      "yahoo_symbol": "VEDL.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "Vedanta Limited",
+        "Vedanta"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "HINDALCO": {
+      "company_name": "Hindalco Industries Limited",
+      "yahoo_symbol": "HINDALCO.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "Hindalco Industries Limited",
+        "Hindalco Industries"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "NMDC": {
+      "company_name": "NMDC Limited",
+      "yahoo_symbol": "NMDC.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "NMDC Limited",
+        "NMDC"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "JINDALSTEL": {
+      "company_name": "Jindal Steel Limited",
+      "yahoo_symbol": "JINDALSTEL.NS",
+      "sector": "Basic Materials",
+      "aliases": [
+        "Jindal Steel Limited",
+        "Jindal Steel"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "POLICYBZR": {
+      "company_name": "PB Fintech Limited",
+      "yahoo_symbol": "POLICYBZR.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "PB Fintech Limited",
+        "PB Fintech",
+        "Policybazaar"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "ZOMATO": {
+      "company_name": "Eternal Limited",
+      "yahoo_symbol": "ETERNAL.NS",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "Eternal Limited",
+        "Zomato"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true,
+      "note": "NSE symbol renamed ZOMATO -> ETERNAL; Yahoo serves ETERNAL.NS only."
+    },
+    "PAYTM": {
+      "company_name": "One97 Communications Limited",
+      "yahoo_symbol": "PAYTM.NS",
+      "sector": "Technology",
+      "aliases": [
+        "One97 Communications Limited",
+        "One97 Communications",
+        "Paytm"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "NYKAA": {
+      "company_name": "FSN E-Commerce Ventures Limited",
+      "yahoo_symbol": "NYKAA.NS",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "FSN E-Commerce Ventures Limited",
+        "FSN E-Commerce Ventures",
+        "Nykaa",
+        "FSN E-Commerce"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "LTIM": {
+      "company_name": "LTIMindtree Limited",
+      "yahoo_symbol": "LTIM.NS",
+      "sector": "Technology",
+      "aliases": [
+        "LTIMindtree Limited",
+        "LTIMindtree",
+        "L&T Infotech",
+        "Larsen & Toubro Infotech"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": false,
+      "note": "No Yahoo feed under LTIM/LTIMINDTREE/MINDTREE on .NS or .BO (checked 2026-10-23)."
+    },
+    "PERSISTENT": {
+      "company_name": "Persistent Systems Limited",
+      "yahoo_symbol": "PERSISTENT.NS",
+      "sector": "Technology",
+      "aliases": [
+        "Persistent Systems Limited",
+        "Persistent Systems"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "MPHASIS": {
+      "company_name": "Mphasis Limited",
+      "yahoo_symbol": "MPHASIS.NS",
+      "sector": "Technology",
+      "aliases": [
+        "Mphasis Limited"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "COFORGE": {
+      "company_name": "Coforge Limited",
+      "yahoo_symbol": "COFORGE.NS",
+      "sector": "Technology",
+      "aliases": [
+        "Coforge Limited"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    },
+    "ICICIGI": {
+      "company_name": "ICICI Lombard General Insurance Company Limited",
+      "yahoo_symbol": "ICICIGI.NS",
+      "sector": "Financial Services",
+      "aliases": [
+        "ICICI Lombard General Insurance Company Limited",
+        "ICICI Lombard General Insurance Company",
+        "ICICI Lombard"
+      ],
+      "tick_size": 0.05,
+      "lot_size": 1,
+      "feed_available": true
+    }
+  }
+}

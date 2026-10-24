@@ -335,7 +335,8 @@ class InstitutionalPricingEngine:
 
 if __name__ == "__main__":
     import sqlite3
-    db_path = os.path.join(os.getcwd(), "data", "market_data.db")
+    from src.paths import DB_PATH
+    db_path = str(DB_PATH)
     conn = sqlite3.connect(db_path)
     df_test = pd.read_sql("SELECT timestamp, open, high, low, close, volume FROM daily_ohlcv WHERE ticker = 'RELIANCE' ORDER BY timestamp ASC", conn)
     conn.close()

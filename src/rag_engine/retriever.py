@@ -1,4 +1,7 @@
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+import os
 import logging
 from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
@@ -7,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 class StrategyRetriever:
     def __init__(self):
-        self.chroma_path = os.path.join(os.getcwd(), "data", "chromadb")
+        from src.paths import CHROMA_DIR
+        self.chroma_path = str(CHROMA_DIR)
         # Must match the model used in indexer.py exactly
         self.embeddings = OllamaEmbeddings(model="nomic-embed-text")
         

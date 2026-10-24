@@ -111,6 +111,65 @@ def size_long(entry: float, stop: float, cash: float, risk_pct: float, costs: Eq
     return lo
 
 
+def size_short(entry: float, stop: float, cash: float, risk_pct: float, costs: EquityCosts,
+               allocation_pct: float = 25.0, margin_pct: float = 100.0) -> int:
+    """Intraday-only short sizing. Mirror of size_long with three real differences.
+
+    The price order is inverted (stop above entry), the adverse exit fill moves UPWARD
+    because the exit is a buy, and the fee legs swap: the entry pays SELL-side charges.
+    margin_pct defaults to the full notional; modelling a lower broker margin would imply
+    leverage on a position whose loss is unbounded, which this tool does not simulate.
+    """
+    if not costs.intraday:
+        return 0
+    values = (entry, stop, cash, risk_pct, allocation_pct, margin_pct)
+    if not all(math.isfinite(v) for v in values) or not 0 < entry < stop or cash <= 0:
+        return 0
+    if not 0 < risk_pct <= 3 or not 0 < allocation_pct <= 100:
+        raise ValueError("Risk must be (0, 3]% and allocation (0, 100]%")
+    if not 0 < margin_pct <= 100:
+        raise ValueError("Short margin must be (0, 100]% of notional; leverage is not modelled")
+    budget = cash * risk_pct / 100
+    allocation = cash * allocation_pct / 100
+    exit_fill = stop * (1 + costs.slippage_bps / 10000)
+    margin_per_share = entry * margin_pct / 100
+    lo, hi = 0, int(min(allocation / margin_per_share, budget / (exit_fill - entry)))
+    while lo < hi:
+        q = (lo + hi + 1) // 2
+        entry_fee = costs.fee(entry, q, "SELL")
+        loss = q * (exit_fill - entry) + entry_fee + costs.fee(exit_fill, q, "BUY")
+        if q * margin_per_share + entry_fee <= min(cash, allocation) and loss <= budget:
+            lo = q
+        else:
+            hi = q - 1
+    return lo
+
+
+def resolve_exit(row, stop: float, target: float, direction: str = "LONG") -> tuple:
+    """(raw_exit_price, reason) or (None, None) if neither barrier is touched.
+
+    Single source of truth for barrier resolution, shared by the historical replay and the
+    paper book so the two can never drift apart. Two rules that matter:
+    a gap through the stop fills at the worse OPEN, not at the stop; and if both barriers
+    are touched inside one bar the STOP wins, because bar data cannot say which came first.
+    """
+    if direction == "LONG":
+        if row.open <= stop:
+            return row.open, "gap_stop"
+        if row.low <= stop:
+            return stop, "stop"
+        if row.high >= target:
+            return target, "target"
+        return None, None
+    if row.open >= stop:
+        return row.open, "gap_stop"
+    if row.high >= stop:
+        return stop, "stop"
+    if row.low <= target:
+        return target, "target"
+    return None, None
+
+
 def replay(frame: pd.DataFrame, capital: float = 200000.0, risk_pct: float = 0.5,
            allocation_pct: float = 25.0, intraday: bool = True,
            costs: EquityCosts = None, reward_risk: float = 2.0,
@@ -156,13 +215,7 @@ def replay(frame: pd.DataFrame, capital: float = 200000.0, risk_pct: float = 0.5
                     cash -= entry * q + fee
         if position:
             p = position
-            raw_exit, reason = None, None
-            if row.open <= p["stop"]:
-                raw_exit, reason = row.open, "gap_stop"
-            elif row.low <= p["stop"]:
-                raw_exit, reason = p["stop"], "stop"
-            elif row.high >= p["target"]:
-                raw_exit, reason = p["target"], "target"
+            raw_exit, reason = resolve_exit(row, p["stop"], p["target"], "LONG")
             last = i == len(df) - 1
             session_end = last or df.iloc[i + 1].timestamp.date() != day
             if raw_exit is None and (last or (intraday and session_end)):

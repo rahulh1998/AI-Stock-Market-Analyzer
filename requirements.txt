@@ -1,37 +1,42 @@
-# Data & Quantitative Math
+# Full stack. For the lightweight research workspace only, use requirements-research.txt.
+# These are manifests, not a verified cross-platform lockfile; run `pip check` in a fresh
+# environment before treating any combination as a tested snapshot.
+
+# --- Core: data, maths, signals, UI (required by the Trading signals workspace) ---
 yfinance
 pandas
 pandas-ta
 numpy
-
-# AI & Agents
-langchain-core
-langchain-google-genai
-langgraph
-
-# RAG & Embeddings
-chromadb
-sentence-transformers
-pypdf
-langchain-text-splitters
-
-# Database
-sqlalchemy
-psycopg2-binary
-
-# UI & Dashboard
 streamlit
 plotly
-python-dotenv
-
-# Imports used by the existing experimental modules
+requests
 joblib
+
+# --- News sentiment (FinBERT). torch here may be the CPU build; that is enough. ---
+# transformers is imported lazily inside finbert_scorer.load_finbert, so the app starts
+# without it and degrades to the keyword lexicon if the model cannot be loaded.
+transformers
+torch
+
+# --- Optional: tabular ML experiments (model_comparator / model_trainer, not wired into
+#     the signal path and not validated; see docs/REALISTIC_TRADING_ROADMAP.md) ---
 scikit-learn
 xgboost
 lightgbm
 catboost
-torch
-requests
+
+# --- Optional: RAG over the books corpus + local LLM agent commentary.
+#     Requires Ollama installed separately from https://ollama.com/ ---
+langchain-core
+langchain-text-splitters
 langchain-ollama
 langchain-chroma
 langchain-community
+langgraph
+chromadb
+pypdf
+
+# Removed as unused by any import in this repository:
+#   langchain-google-genai, psycopg2-binary, sqlalchemy, sentence-transformers,
+#   python-dotenv (load_dotenv is never called), jugaad-data (the NSE integration the
+#   README used to advertise does not exist in the code).

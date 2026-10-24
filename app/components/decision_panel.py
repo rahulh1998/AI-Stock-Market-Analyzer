@@ -40,7 +40,7 @@ def render_decision_panel(bars, interval, capital, risk, allocation, daily_loss,
     st.caption(f"Known at: {report.get('as_of_bar_close', 'unavailable')} | "
                f"Scenario review deadline: {report.get('valid_until', 'unavailable')} | Execution eligible: NO")
     if report["patterns"]:
-        st.dataframe(report["patterns"], use_container_width=True)
+        st.dataframe(report["patterns"], width='stretch')
     else:
         st.info("No supported pattern on the latest completed candle. WAIT is a valid result.")
     if report["plan"]:
@@ -56,7 +56,7 @@ def render_decision_panel(bars, interval, capital, risk, allocation, daily_loss,
     with st.expander("Observed levels & recent pattern timeline"):
         st.json(report.get("levels", {}))
         if report["recent_patterns"]:
-            st.dataframe(report["recent_patterns"], use_container_width=True)
+            st.dataframe(report["recent_patterns"], width='stretch')
         st.caption("Swing patterns appear only when confirmed. Supported pattern definitions are in the analysis documentation; "
                    "not every chart pattern is detectable and a candle shape alone is not a trade.")
     with st.expander("Historical-neighbor ML evidence (experimental)"):

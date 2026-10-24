@@ -1,4 +1,7 @@
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+import os
 import sqlite3
 import logging
 import json
@@ -12,9 +15,13 @@ from sklearn.metrics import accuracy_score, classification_report
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.getcwd(), "data", "market_data.db")
-CONFIG_PATH = os.path.join(os.getcwd(), "config", "nifty100_watchlist.json")
-MODEL_DIR = os.path.join(os.getcwd(), "data", "models")
+from src.paths import DB_PATH as _DB_PATH, MODEL_DIR as _MODEL_DIR, WATCHLIST_PATH
+
+DB_PATH = str(_DB_PATH)
+# Was config/nifty100_watchlist.json, which does not exist; this module silently fell
+# back to five hardcoded tickers. Point it at the real watchlist.
+CONFIG_PATH = str(WATCHLIST_PATH)
+MODEL_DIR = str(_MODEL_DIR)
 MODEL_PATH = os.path.join(MODEL_DIR, "xgboost_model.pkl")
 
 class StockModelTrainer:

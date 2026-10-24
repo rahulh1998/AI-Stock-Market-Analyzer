@@ -15,8 +15,10 @@ from torch.utils.data import Dataset, DataLoader
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.getcwd(), "data", "market_data.db")
-MODEL_DIR = os.path.join(os.getcwd(), "data", "models")
+from src.paths import DB_PATH as _DB_PATH, MODEL_DIR as _MODEL_DIR
+
+DB_PATH = str(_DB_PATH)
+MODEL_DIR = str(_MODEL_DIR)
 MODEL_PATH = os.path.join(MODEL_DIR, "deep_learning_lstm.pt")
 
 class PriceSequenceDataset(Dataset):
