@@ -1,0 +1,10 @@
+# Streamlit's module watcher walks every transformers submodule on each rerun, which
+# raises hundreds of ModuleNotFoundError tracebacks for torchvision (an optional
+# dependency we do not install) and adds seconds to startup. None of it is fatal, but
+# it drowns real errors in the log and slows the app down, so the watcher is off.
+[server]
+fileWatcherType = "none"
+headless = true
+
+[browser]
+gatherUsageStats = false

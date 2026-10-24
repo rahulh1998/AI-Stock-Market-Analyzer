@@ -27,6 +27,7 @@ warnings.filterwarnings("ignore")
 import pandas as pd
 import yfinance as yf
 
+from src.data_pipeline.universe import MARKETS, load_market_instruments, split_key
 from src.paths import DB_PATH, INSTRUMENTS_PATH, WATCHLIST_PATH
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
@@ -37,14 +38,24 @@ UPSERT = """INSERT OR REPLACE INTO daily_ohlcv
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"""
 
 
-def load_instruments() -> dict:
-    if INSTRUMENTS_PATH.exists():
-        return json.loads(INSTRUMENTS_PATH.read_text(encoding="utf-8")).get("instruments", {})
-    return {}
+def load_instruments(markets=("NSE",)) -> dict:
+    """Instruments across markets, keyed exactly as they are stored in daily_ohlcv.
+
+    NSE rows keep their bare ticker so five years of existing history stays addressable;
+    every other market is stored market-qualified ("US:AAPL"). The primary key is
+    (ticker, timestamp), so qualifying the key is enough to keep markets apart without a
+    schema migration, and split_key() reads both forms.
+    """
+    combined = {}
+    for code in markets:
+        for ticker, meta in load_market_instruments(code).items():
+            key = ticker if code == "NSE" else f"{code}:{ticker}"
+            combined[key] = {**meta, "market": code, "bare_ticker": ticker}
+    return combined
 
 
-def load_watchlist() -> list:
-    return json.loads(WATCHLIST_PATH.read_text(encoding="utf-8")).get("watchlist", [])
+def load_watchlist(markets=("NSE",)) -> list:
+    return list(load_instruments(markets))
 
 
 def normalise(frame: pd.DataFrame) -> pd.DataFrame:
@@ -98,10 +109,17 @@ def main() -> int:
                         help="Rebuild this many years for every ticker instead of filling gaps")
     parser.add_argument("--ticker", action="append", default=None, help="Limit to these tickers")
     parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--markets", default="NSE",
+                        help="Comma-separated markets to update, e.g. NSE,US")
     args = parser.parse_args()
 
-    instruments = load_instruments()
-    tickers = args.ticker or load_watchlist()
+    markets = tuple(m.strip().upper() for m in args.markets.split(",") if m.strip())
+    unknown = [m for m in markets if m not in MARKETS]
+    if unknown:
+        print(f"Unknown market(s): {unknown}. Known: {sorted(MARKETS)}")
+        return 2
+    instruments = load_instruments(markets)
+    tickers = args.ticker or list(instruments)
     today = date.today()
 
     connection = sqlite3.connect(DB_PATH, timeout=60.0)
@@ -117,7 +135,8 @@ def main() -> int:
         if not meta.get("feed_available", True):
             skipped.append((ticker, meta.get("note", "marked feed_available: false")))
             continue
-        symbol = meta.get("yahoo_symbol") or f"{ticker}.NS"
+        code, bare = split_key(ticker)
+        symbol = meta.get("yahoo_symbol") or MARKETS[code].yahoo_symbol(bare)
         if args.seed_years:
             start = today - timedelta(days=int(args.seed_years * 365.25))
         else:
@@ -127,6 +146,7 @@ def main() -> int:
         jobs.append((ticker, symbol, start, today + timedelta(days=1)))
 
     print(f"Database     : {DB_PATH}")
+    print(f"Markets      : {', '.join(markets)}")
     print(f"Rows before  : {rows_before:,}   latest stored date: {overall_before}")
     print(f"Tickers      : {len(jobs)} to fetch, {len(skipped)} skipped")
     if skipped:

@@ -1,0 +1,563 @@
+{
+  "schema_version": 1,
+  "market": "US",
+  "currency": "USD",
+  "default_tick_size": 0.01,
+  "alias_rule": "Generated aliases keep >=2 tokens unless the single token is distinctive; ordinary English words (Apple, Meta, Visa) are excluded because a false match corrupts a reading while a miss costs nothing.",
+  "instruments": {
+    "AAPL": {
+      "company_name": "Apple Inc.",
+      "yahoo_symbol": "AAPL",
+      "sector": "Technology",
+      "aliases": [
+        "Apple Inc."
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "MSFT": {
+      "company_name": "Microsoft Corporation",
+      "yahoo_symbol": "MSFT",
+      "sector": "Technology",
+      "aliases": [
+        "Microsoft Corporation",
+        "Microsoft"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "NVDA": {
+      "company_name": "NVIDIA Corporation",
+      "yahoo_symbol": "NVDA",
+      "sector": "Technology",
+      "aliases": [
+        "NVIDIA Corporation",
+        "NVIDIA"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "GOOGL": {
+      "company_name": "Alphabet Inc.",
+      "yahoo_symbol": "GOOGL",
+      "sector": "Communication Services",
+      "aliases": [
+        "Alphabet Inc.",
+        "Alphabet"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "AMZN": {
+      "company_name": "Amazon.com, Inc.",
+      "yahoo_symbol": "AMZN",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "Amazon.com, Inc.",
+        "Amazon.com"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "META": {
+      "company_name": "Meta Platforms, Inc.",
+      "yahoo_symbol": "META",
+      "sector": "Communication Services",
+      "aliases": [
+        "Meta Platforms, Inc.",
+        "Meta Platforms"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "TSLA": {
+      "company_name": "Tesla, Inc.",
+      "yahoo_symbol": "TSLA",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "Tesla, Inc.",
+        "Tesla"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "AVGO": {
+      "company_name": "Broadcom Inc.",
+      "yahoo_symbol": "AVGO",
+      "sector": "Technology",
+      "aliases": [
+        "Broadcom Inc.",
+        "Broadcom"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "AMD": {
+      "company_name": "Advanced Micro Devices, Inc.",
+      "yahoo_symbol": "AMD",
+      "sector": "Technology",
+      "aliases": [
+        "Advanced Micro Devices, Inc.",
+        "Advanced Micro Devices"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "INTC": {
+      "company_name": "Intel Corporation",
+      "yahoo_symbol": "INTC",
+      "sector": "Technology",
+      "aliases": [
+        "Intel Corporation"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "CRM": {
+      "company_name": "Salesforce, Inc.",
+      "yahoo_symbol": "CRM",
+      "sector": "Technology",
+      "aliases": [
+        "Salesforce, Inc.",
+        "Salesforce"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "ORCL": {
+      "company_name": "Oracle Corporation",
+      "yahoo_symbol": "ORCL",
+      "sector": "Technology",
+      "aliases": [
+        "Oracle Corporation"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "ADBE": {
+      "company_name": "Adobe Inc.",
+      "yahoo_symbol": "ADBE",
+      "sector": "Technology",
+      "aliases": [
+        "Adobe Inc.",
+        "Adobe"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "NFLX": {
+      "company_name": "Netflix, Inc.",
+      "yahoo_symbol": "NFLX",
+      "sector": "Communication Services",
+      "aliases": [
+        "Netflix, Inc.",
+        "Netflix"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "JPM": {
+      "company_name": "JPMorgan Chase & Co.",
+      "yahoo_symbol": "JPM",
+      "sector": "Financial Services",
+      "aliases": [
+        "JPMorgan Chase & Co.",
+        "JPMorgan Chase"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "BAC": {
+      "company_name": "Bank of America Corporation",
+      "yahoo_symbol": "BAC",
+      "sector": "Financial Services",
+      "aliases": [
+        "Bank of America Corporation",
+        "Bank of America"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "GS": {
+      "company_name": "The Goldman Sachs Group, Inc.",
+      "yahoo_symbol": "GS",
+      "sector": "Financial Services",
+      "aliases": [
+        "The Goldman Sachs Group, Inc.",
+        "The Goldman Sachs Group"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "V": {
+      "company_name": "Visa Inc.",
+      "yahoo_symbol": "V",
+      "sector": "Financial Services",
+      "aliases": [
+        "Visa Inc."
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "MA": {
+      "company_name": "Mastercard Incorporated",
+      "yahoo_symbol": "MA",
+      "sector": "Financial Services",
+      "aliases": [
+        "Mastercard Incorporated",
+        "Mastercard"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "BRK-B": {
+      "company_name": "Berkshire Hathaway Inc.",
+      "yahoo_symbol": "BRK-B",
+      "sector": "Financial Services",
+      "aliases": [
+        "Berkshire Hathaway Inc.",
+        "Berkshire Hathaway"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "UNH": {
+      "company_name": "UnitedHealth Group Incorporated",
+      "yahoo_symbol": "UNH",
+      "sector": "Healthcare",
+      "aliases": [
+        "UnitedHealth Group Incorporated",
+        "UnitedHealth Group"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "JNJ": {
+      "company_name": "Johnson & Johnson",
+      "yahoo_symbol": "JNJ",
+      "sector": "Healthcare",
+      "aliases": [
+        "Johnson & Johnson"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "LLY": {
+      "company_name": "Eli Lilly and Company",
+      "yahoo_symbol": "LLY",
+      "sector": "Healthcare",
+      "aliases": [
+        "Eli Lilly and Company",
+        "Eli Lilly and"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "PFE": {
+      "company_name": "Pfizer Inc.",
+      "yahoo_symbol": "PFE",
+      "sector": "Healthcare",
+      "aliases": [
+        "Pfizer Inc.",
+        "Pfizer"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "MRK": {
+      "company_name": "Merck & Co., Inc.",
+      "yahoo_symbol": "MRK",
+      "sector": "Healthcare",
+      "aliases": [
+        "Merck & Co., Inc.",
+        "Merck & Co."
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "XOM": {
+      "company_name": "Exxon Mobil Corporation",
+      "yahoo_symbol": "XOM",
+      "sector": "Energy",
+      "aliases": [
+        "Exxon Mobil Corporation",
+        "Exxon Mobil"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "CVX": {
+      "company_name": "Chevron Corporation",
+      "yahoo_symbol": "CVX",
+      "sector": "Energy",
+      "aliases": [
+        "Chevron Corporation",
+        "Chevron"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "WMT": {
+      "company_name": "Walmart Inc.",
+      "yahoo_symbol": "WMT",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "Walmart Inc.",
+        "Walmart"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "COST": {
+      "company_name": "Costco Wholesale Corporation",
+      "yahoo_symbol": "COST",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "Costco Wholesale Corporation",
+        "Costco Wholesale"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "PG": {
+      "company_name": "The Procter & Gamble Company",
+      "yahoo_symbol": "PG",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "The Procter & Gamble Company",
+        "The Procter & Gamble"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "KO": {
+      "company_name": "The Coca-Cola Company",
+      "yahoo_symbol": "KO",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "The Coca-Cola Company",
+        "The Coca-Cola"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "PEP": {
+      "company_name": "PepsiCo, Inc.",
+      "yahoo_symbol": "PEP",
+      "sector": "Consumer Defensive",
+      "aliases": [
+        "PepsiCo, Inc.",
+        "PepsiCo"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "HD": {
+      "company_name": "The Home Depot, Inc.",
+      "yahoo_symbol": "HD",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "The Home Depot, Inc.",
+        "The Home Depot"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "MCD": {
+      "company_name": "McDonald's Corporation",
+      "yahoo_symbol": "MCD",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "McDonald's Corporation",
+        "McDonald's"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "NKE": {
+      "company_name": "NIKE, Inc.",
+      "yahoo_symbol": "NKE",
+      "sector": "Consumer Cyclical",
+      "aliases": [
+        "NIKE, Inc.",
+        "NIKE"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "DIS": {
+      "company_name": "The Walt Disney Company",
+      "yahoo_symbol": "DIS",
+      "sector": "Communication Services",
+      "aliases": [
+        "The Walt Disney Company",
+        "The Walt Disney"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "BA": {
+      "company_name": "The Boeing Company",
+      "yahoo_symbol": "BA",
+      "sector": "Industrials",
+      "aliases": [
+        "The Boeing Company",
+        "The Boeing"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "CAT": {
+      "company_name": "Caterpillar Inc.",
+      "yahoo_symbol": "CAT",
+      "sector": "Industrials",
+      "aliases": [
+        "Caterpillar Inc.",
+        "Caterpillar"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "GE": {
+      "company_name": "GE Aerospace",
+      "yahoo_symbol": "GE",
+      "sector": "Industrials",
+      "aliases": [
+        "GE Aerospace"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    },
+    "UPS": {
+      "company_name": "United Parcel Service, Inc.",
+      "yahoo_symbol": "UPS",
+      "sector": "Industrials",
+      "aliases": [
+        "United Parcel Service, Inc.",
+        "United Parcel Service"
+      ],
+      "tick_size": 0.01,
+      "lot_size": 1,
+      "feed_available": true,
+      "market": "US",
+      "currency": "USD"
+    }
+  }
+}

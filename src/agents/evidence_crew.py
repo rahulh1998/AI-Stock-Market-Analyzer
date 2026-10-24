@@ -195,10 +195,11 @@ def algo_agent(model: dict, direction: str) -> Evidence:
     median = model.get("median_return_pct")
     if median is None:
         return _unavailable("algo", "No median analogue return")
+    # Stance is always stated in MARKET terms — analogues that rose are bullish, whichever
+    # way the trade points. The arbiter is what decides whether that leans against the
+    # trade, so expressing stance trade-relative here would make it penalise twice.
+    stance = BULLISH if float(median) > 0 else BEARISH if float(median) < 0 else NEUTRAL
     signed = float(median) * (1.0 if direction == "LONG" else -1.0)
-    stance = BULLISH if signed > 0 else BEARISH if signed < 0 else NEUTRAL
-    if direction == "SHORT":
-        stance = BEARISH if signed > 0 else BULLISH
     return Evidence(
         agent="algo", stance=stance, strength=min(1.0, abs(float(median)) / 2.0),
         headline=f"Historical analogues: median {float(median):+.2f}% over "

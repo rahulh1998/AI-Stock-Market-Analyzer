@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from src.data_pipeline.broker_client import MarketDataFetcher
+from src.data_pipeline.universe import MARKETS, costs_for, load_universe, split_key
 from src.paper_trading.ledger import PaperBook
 from src.paths import WATCHLIST_PATH
 from src.quant_engine.decision_engine import AccountRisk, SignalPolicy
@@ -27,10 +28,23 @@ ACTION_STYLE = {
 
 
 @st.cache_data(show_spinner=False)
-def load_watchlist() -> list:
-    if not WATCHLIST_PATH.exists():
+def load_watchlist(markets=("NSE",)) -> list:
+    """Instrument keys for the selected markets.
+
+    NSE keys stay bare for continuity with five years of stored history; other markets are
+    qualified ("US:AAPL") because bare symbols collide across exchanges.
+    """
+    try:
+        universe = load_universe(tuple(markets))
+    except Exception:
+        universe = {}
+    if not universe:
         return ["RELIANCE", "TCS", "HDFCBANK", "INFY", "SBIN"]
-    return json.loads(WATCHLIST_PATH.read_text(encoding="utf-8")).get("watchlist", [])
+    keys = []
+    for key, meta in universe.items():
+        code, ticker = split_key(key)
+        keys.append(ticker if code == "NSE" else key)
+    return sorted(keys, key=lambda k: (split_key(k)[0] != "NSE", k))
 
 
 def services():
@@ -44,8 +58,57 @@ def services():
     return st.session_state.signal_services
 
 
+def ai_services() -> dict:
+    """RAG retriever and decision model, built on first use.
+
+    Kept out of `services()` because constructing them touches Ollama and ChromaDB, and the
+    app must start cleanly with neither available. Failures are recorded and surfaced,
+    never raised — the whole pipeline is designed to run without a model.
+    """
+    if "ai_services" not in st.session_state:
+        retriever, decision_engine, errors = None, None, []
+        try:
+            from src.rag_engine.retriever import StrategyRetriever
+
+            retriever = StrategyRetriever()
+        except Exception as exc:
+            errors.append(f"RAG retriever unavailable: {type(exc).__name__}: {exc}")
+        try:
+            from src.llm_engine.tasks import DecisionEngine
+
+            engine = DecisionEngine()
+            decision_engine = engine if engine.available else None
+            if decision_engine is None:
+                errors.append("No decision model reachable (no API key, and Ollama is down "
+                              "or the model is not pulled).")
+        except Exception as exc:
+            errors.append(f"Decision model unavailable: {type(exc).__name__}: {exc}")
+        st.session_state.ai_services = {"retriever": retriever,
+                                        "decision_engine": decision_engine,
+                                        "errors": errors}
+    return st.session_state.ai_services
+
+
+@st.cache_data(show_spinner=False, ttl=120)
+def cached_provider_status() -> dict:
+    from src.llm_engine.providers import provider_status
+
+    try:
+        return provider_status()
+    except Exception as exc:
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
 def sidebar_settings() -> dict:
     st.sidebar.title("Signal settings")
+    markets = st.sidebar.multiselect(
+        "Markets", sorted(MARKETS), default=["NSE"],
+        help="Each market carries its own fee schedule, currency and shorting rules. "
+             "Mixing currencies in one portfolio is not supported.")
+    markets = tuple(markets or ["NSE"])
+    if len(markets) > 1:
+        st.sidebar.warning("Multiple markets selected: position sizes are computed in each "
+                           "market's own currency and are not comparable.")
     interval = st.sidebar.selectbox("Interval", ["15m", "5m", "1h", "1d"], index=0)
     intraday = interval != "1d"
 
@@ -81,12 +144,31 @@ def sidebar_settings() -> dict:
     st.sidebar.caption("Costs are illustrative NSE rates. Verify against your contract note.")
     slippage = st.sidebar.number_input("Slippage per leg (bps)", 0.0, 100.0, 5.0)
 
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("AI evidence")
+    use_crew = st.sidebar.checkbox(
+        "Run the agent crew on deep dive", value=True,
+        help="Retrieves cited passages from the trading literature and asks a decision "
+             "model whether a pending binary event makes this entry risky. Adds a few "
+             "seconds. It can only reduce conviction or veto, never create a signal.")
+    status = cached_provider_status()
+    if "error" not in status:
+        active = status.get("active", "none")
+        label = {"jev": "Jev (TypeSafe)", "ollama": f"local {status['ollama']['model']}",
+                 "none": "none"}.get(active, active)
+        (st.sidebar.success if active != "none" else st.sidebar.info)(
+            f"Decision model: {label}")
+        if not status["jev"]["available"]:
+            st.sidebar.caption("Jev: set OPENROUTER_API_KEY to enable.")
+
     return {
+        "markets": markets, "use_crew": use_crew,
         "interval": interval, "intraday": intraday, "mode": mode,
         "account": AccountRisk(equity=capital, cash=min(cash, capital),
                                day_start_equity=capital, peak_equity=capital),
         "policy": SignalPolicy(risk_pct=risk_pct, allocation_pct=allocation_pct),
-        "costs": EquityCosts(intraday=intraday, slippage_bps=slippage),
+        "costs": costs_for(markets[0], intraday=intraday, slippage_bps=slippage),
+        "slippage": slippage,
         "config": SignalConfig(sentiment_enabled=sentiment_on),
         "enable_short": enable_short,
     }
@@ -96,7 +178,7 @@ def render_scanner(settings: dict):
     st.subheader("Watchlist scanner")
     st.caption("Ranked by action, then conviction. The daily long gate passes on roughly 7% "
                "of bars, so most names reading HOLD is the normal state, not a fault.")
-    watchlist = load_watchlist()
+    watchlist = load_watchlist(settings["markets"])
     service = services()
 
     left, middle, right = st.columns([2, 1, 1])
@@ -144,6 +226,39 @@ def render_scanner(settings: dict):
                        f"scan_{settings['interval']}.csv", "text/csv")
 
 
+STANCE_ICON = {"bullish": "🟢", "bearish": "🔴", "blocking": "⛔", "neutral": "⚪"}
+
+
+def _render_crew(crew: dict, errors=None):
+    """Agent evidence. Deliberately shows which agents were scored and which were not."""
+    st.markdown("#### Agent evidence")
+    for message in errors or []:
+        st.caption(f"⚠️ {message}")
+    if not crew:
+        st.info("The agent crew did not run. Enable it in the sidebar, or no AI service "
+                "was reachable.")
+        return
+    scored = set(crew.get("scored_agents") or [])
+    st.caption(crew.get("rule", ""))
+    for item in crew.get("evidence", []):
+        icon = STANCE_ICON.get(item.get("stance"), "⚪")
+        agent = item.get("agent", "?")
+        tag = "scored" if agent in scored else "explanation only"
+        if not item.get("available"):
+            st.markdown(f"⚫ **{agent}** — not available · {item.get('reason', '')}")
+            continue
+        st.markdown(f"{icon} **{agent}** · _{tag}_ — {item.get('headline', '')}")
+        if item.get("detail"):
+            st.caption(item["detail"])
+        for citation in item.get("citations", [])[:3]:
+            st.caption(f"  ↳ {citation}")
+    multiplier = crew.get("conviction_multiplier", 1.0)
+    if multiplier < 1.0:
+        st.warning(f"Agent penalties scaled conviction by ×{multiplier:.3f}")
+    for veto in crew.get("vetoes", []):
+        st.error(f"VETO — {veto}")
+
+
 def _component_badge(label: str, detail: dict):
     if detail.get("available"):
         st.success(f"**{label}** · penalty {detail.get('penalty', 0):.0%}")
@@ -156,7 +271,7 @@ def _component_badge(label: str, detail: dict):
 def render_deep_dive(settings: dict):
     st.subheader("Single-stock deep dive")
     service = services()
-    watchlist = load_watchlist()
+    watchlist = load_watchlist(settings["markets"])
     left, right = st.columns([2, 1])
     with left:
         ticker = st.selectbox("Ticker", watchlist, index=0)
@@ -176,19 +291,31 @@ def render_deep_dive(settings: dict):
             if settings["config"].sentiment_enabled:
                 sentiment = service["sentiment"].reading(ticker, bars=bars)
             clock, clock_label = resolve_clock(bars, settings["interval"], settings["mode"])
+            market_code, _ = split_key(ticker)
+            market_costs = costs_for(market_code, intraday=settings["intraday"],
+                                     slippage_bps=settings["slippage"])
+            ai = ai_services() if settings["use_crew"] else {"retriever": None,
+                                                             "decision_engine": None,
+                                                             "errors": []}
+            company = (load_universe(settings["markets"]).get(
+                f"{market_code}:{split_key(ticker)[1]}", {}).get("company_name") or ticker)
             signal = generate_signal(
                 bars, settings["interval"], ticker=ticker, account=settings["account"],
-                policy=settings["policy"], costs=settings["costs"], sentiment=sentiment,
+                policy=settings["policy"], costs=market_costs, sentiment=sentiment,
                 now=clock, config=settings["config"],
-                enable_short=settings["enable_short"] and settings["intraday"],
-                confidence_lookup=service["book"].confidence_lookup())
-            st.session_state["deep_dive"] = (key, signal, bars, sentiment, clock_label)
+                enable_short=(settings["enable_short"] and settings["intraday"]
+                              and MARKETS[market_code].intraday_short_only is not None),
+                confidence_lookup=service["book"].confidence_lookup(),
+                retriever=ai["retriever"], decision_engine=ai["decision_engine"],
+                company=company)
+            st.session_state["deep_dive"] = (key, signal, bars, sentiment, clock_label,
+                                             ai.get("errors", []), market_code)
 
     stored = st.session_state.get("deep_dive")
     if not stored or stored[0] != key:
         st.info("Press **Analyse** to evaluate this ticker.")
         return
-    _, signal, bars, sentiment, clock_label = stored
+    _, signal, bars, sentiment, clock_label, ai_errors, market_code = stored
 
     icon, _ = ACTION_STYLE.get(signal.action, ("⚪", "info"))
     head = st.columns(4)
@@ -271,6 +398,8 @@ def render_deep_dive(settings: dict):
         _component_badge("Algo (historical neighbours)", signal.components.get("algo", {}))
     with sent_col:
         _component_badge("News sentiment", signal.components.get("sentiment", {}))
+
+    _render_crew(signal.components.get("crew"), ai_errors)
 
     if sentiment:
         st.markdown("#### News")
